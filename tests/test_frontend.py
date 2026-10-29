@@ -50,4 +50,29 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(self.http.req.get_header('X-csrf-token'),'csrf')
         self.assertEqual(self.c.post('/api/login',data=b'audio',content_type='audio/webm').status_code,415)
 
+    def test_document_binary_proxy_and_download_headers(self):
+        response=self.c.post('/api/rooms/room/documents/import',data=b'word-bytes',content_type='application/octet-stream',headers={'X-CSRF-Token':'csrf','X-File-Name':'Brief.docx'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(self.http.req.get_header('X-file-name'),'Brief.docx')
+        self.assertEqual(self.c.post('/api/login',data=b'word',content_type='application/octet-stream').status_code,415)
+        def download(*a,**k):
+            r=Upstream(b'PK-word-bytes');r.headers['Content-Disposition']='attachment; filename=Brief.docx';return r
+        self.http.open=download
+        response=self.c.get('/api/rooms/room/documents/document/download/docx')
+        self.assertEqual(response.data,b'PK-word-bytes');self.assertIn('Brief.docx',response.headers['Content-Disposition'])
+
+    def test_oauth_callback_only_allows_known_relative_redirects(self):
+        def callback(*a,**k):
+            self.http.req=a[0]
+            r=Upstream(code=302);r.headers['Location']='/#drive=connected';return r
+        self.http.open=callback
+        response=self.c.get('/api/integrations/google/callback?state=test&code=code')
+        self.assertEqual(response.status_code,302);self.assertEqual(response.headers['Location'],'/#drive=connected')
+        self.assertIn('?state=test&code=code',self.http.req.full_url)
+        self.assertEqual(self.c.get('/api/me?unexpected=yes').status_code,400)
+        def evil(*a,**k):
+            r=Upstream(code=302);r.headers['Location']='https://evil.test';return r
+        self.http.open=evil
+        self.assertEqual(self.c.get('/api/integrations/google/callback?state=test').status_code,502)
+
 if __name__=='__main__':unittest.main()
