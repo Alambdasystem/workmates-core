@@ -287,7 +287,7 @@ window.addEventListener('pagehide',cancelVoice);
 
 // Formatting always escapes source text before adding the supported markup.
 function markdown(source) {
-  const inline = text => esc(text).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,label,url) => /^(https?:\/\/|\/api\/rooms\/|\/#canvas=)/i.test(url) ? `<a href="${url}" rel="noopener noreferrer" target="_blank">${label}</a>` : label);
+  const inline = text => esc(text).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,label,url) => { url=url.trim(); return /^(https?:\/\/|\/api\/rooms\/|\/#canvas=)/i.test(url) ? `<a href="${url}" rel="noopener noreferrer" target="_blank">${label}</a>` : label; });
   const lines = String(source || '').split('\n'), out = [];
   for (let i=0; i<lines.length; i++) {
     const line = lines[i];
