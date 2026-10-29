@@ -43,4 +43,11 @@ class FrontendTests(unittest.TestCase):
     def test_remote_http_rejected(self):
         with self.assertRaises(RuntimeError):create_app({'WORKMATES_API_URL':'http://api.example.test'})
 
+    def test_voice_proxy_preserves_audio_and_csrf(self):
+        response=self.c.post('/api/rooms/room/transcribe',data=b'audio-bytes',content_type='audio/webm;codecs=opus',headers={'X-CSRF-Token':'csrf'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(self.http.req.data,b'audio-bytes')
+        self.assertEqual(self.http.req.get_header('X-csrf-token'),'csrf')
+        self.assertEqual(self.c.post('/api/login',data=b'audio',content_type='audio/webm').status_code,415)
+
 if __name__=='__main__':unittest.main()
