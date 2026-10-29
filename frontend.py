@@ -12,7 +12,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def create_app(config=None, opener=None):
     app=Flask(__name__,static_folder='static')
-    app.config.update(WORKMATES_API_URL=os.environ.get('WORKMATES_API_URL',''),MAX_CONTENT_LENGTH=65536)
+    app.config.update(WORKMATES_API_URL=os.environ.get('WORKMATES_API_URL',''),MAX_CONTENT_LENGTH=8*1024*1024)
     if config: app.config.update(config)
     base=app.config['WORKMATES_API_URL'].rstrip('/')
     parsed=urllib.parse.urlparse(base)
@@ -51,14 +51,15 @@ def create_app(config=None, opener=None):
                 abort(403,'Cross-origin request rejected.')
             if request.headers.get('Sec-Fetch-Site')=='cross-site':
                 abort(403,'Cross-site request rejected.')
-            if not request.is_json:
+            voice = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/transcribe') and len(path.split('/')) == 3
+            if not request.is_json and not (voice and request.mimetype.startswith('audio/')):
                 abort(415,'Send application/json.')
         # Validate the browser origin above, then make a server-to-server call.
         # Do not forward the frontend Host/Origin to Render's backend router.
         forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token') if name in request.headers}
         req=urllib.request.Request(base+'/api/'+urllib.parse.quote(path,safe='/'),method=request.method,headers=forwarded,data=request.get_data() if request.method!='GET' else None)
         try:
-            upstream=http.open(req,timeout=30)
+            upstream=http.open(req,timeout=100 if path.endswith('/transcribe') else 30)
         except urllib.error.HTTPError as exc:
             upstream=exc
         except (urllib.error.URLError,TimeoutError,OSError):

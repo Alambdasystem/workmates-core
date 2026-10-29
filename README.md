@@ -51,3 +51,10 @@ python -m py_compile frontend.py
 Seven frontend/proxy tests cover UI serving, cookies/CSRF forwarding, origin rejection, path rejection, upstream errors, redirect blocking, and HTTPS configuration. The corresponding backend has its own authorization and agent tests.
 
 Browser visual testing and live OpenAI tests remain required after deployment. Chat updates by polling every two seconds; token streaming, uploads, image generation, and external work tools are not implemented in this version.
+
+
+## Voice and admin controls
+
+The composer includes opt-in microphone dictation using MediaRecorder (WebM or MP4). Stop recording to transcribe, review the draft, then Send. Browser microphone permissions are required; unsupported browsers can use their keyboard microphone. Recordings stop on group navigation, tab hiding, or after 90 seconds.
+
+The right panel exposes admin-only tool switches (web research, task creation, saved documents), autopilot, and a shared resolution goal. Calling the workmate by its name no longer requires `@`. Models displayed by the UI come from backend configuration, not a hardcoded product label. Web research source links are escaped and open with `noopener noreferrer`.
