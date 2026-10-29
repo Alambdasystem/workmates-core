@@ -67,3 +67,12 @@ The Work panel provides New document, Upload and generated file downloads. Selec
 The Drive tab supports multiple Google account/folder mounts per group, nested browsing and pagination, imports into Canvas and subfolder branches. Admins configure the OAuth client once and authorize accounts through Google. Folder mounting explicitly grants that group's members access to the chosen folder subtree through the connected account. Drive cannot work until that setup and consent are completed.
 
 The admin tool list comes from the backend registry, and Enable all available tools turns on every implemented tool for that group. Additional OpenAI code and image generation charges apply when used. The proxy preserves binary uploads and Content-Disposition downloads. Only Google's callback accepts query parameters and its redirect is limited to known local results.
+
+
+## Generation cards and full screen previews
+
+Picture, diagram and document requests show animated loading cards in the conversation while a real AI job is queued or running. A sending indicator appears immediately for a named generation request; confirmed server state replaces it. The illustration is a loading animation, not simulated partial model output or percentage progress. Saved document/file metadata turns it into an inline preview. Failed, canceled and interrupted jobs stop animating and explain the outcome. Reduced motion settings disable movement.
+
+Click a card for a full screen dialog with X/Escape close and downloads. Documents offer Word/PDF/Markdown/text/HTML choices and Edit in Canvas. Images and sanitized SVG diagrams fit the screen. Supported files have bounded text previews; other files retain downloads. Pending full screen previews automatically switch to the saved output. Closing, navigation and logout clear private preview content and ignore stale asynchronous responses.
+
+Run `node tests/generation_test.js` for dependency-free UI lifecycle checks, alongside Python proxy tests.

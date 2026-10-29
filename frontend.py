@@ -27,7 +27,7 @@ def create_app(config=None, opener=None):
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['X-Frame-Options']='DENY'
         response.headers['Referrer-Policy']='no-referrer'
-        response.headers['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if request.path.startswith('/api/'):
             response.headers['Cache-Control']='no-store'
         return response
@@ -82,6 +82,8 @@ def create_app(config=None, opener=None):
             result=Response(body,status=status,content_type=upstream.headers.get('Content-Type','application/json'))
             if upstream.headers.get('Content-Disposition'):
                 result.headers['Content-Disposition'] = upstream.headers['Content-Disposition']
+            if path.endswith('/preview') and upstream.headers.get('Content-Security-Policy'):
+                result.headers['Content-Security-Policy'] = upstream.headers['Content-Security-Policy']
             for cookie in upstream.headers.get_all('Set-Cookie',[]):
                 result.headers.add('Set-Cookie',cookie)
             return result
