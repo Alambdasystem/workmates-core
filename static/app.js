@@ -19,14 +19,14 @@ async function api(path, method = 'GET', body) {
   const response = await fetch('/api' + path, {method, headers: {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}, body:body === undefined ? undefined : JSON.stringify(body)});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && me) { me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
+    if (response.status === 401 && me) { closeGenerationPreview(); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
     throw new Error(value.error || 'Request failed.');
   }
   return value;
 }
 function messageBody(message) {
   const sources = (message.sources || []).filter(s => /^https?:\/\//i.test(s.url));
-  return `<div class="formatted">${markdown(message.content)}</div>` + (message.attachments || []).map(a => `<a class="file-download" href="/api/rooms/${esc(room.id)}/files/${esc(a.id)}">↓ ${esc(a.filename)}</a>`).join('') + (sources.length ? '<div class="source-links">Sources: ' + sources.map((s,i) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${i+1}] ${esc(s.title)}</a>`).join(' ') + '</div>' : '');
+  return `<div class="formatted">${markdown(message.content)}</div>` + generationAttachmentCards(message) + (sources.length ? '<div class="source-links">Sources: ' + sources.map((s,i) => `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">[${i+1}] ${esc(s.title)}</a>`).join(' ') + '</div>' : '');
 }
 function toast(text) { $('#toast').textContent = text; $('#toast').hidden = false; setTimeout(() => $('#toast').hidden = true, 4500); }
 function timestamp(t) { return new Date(t * 1000).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }
@@ -56,7 +56,7 @@ function renderRooms() {
 }
 async function selectRoom(id) {
   if (canvasDirty() && !confirm('Leave your unsaved document edits?')) return;
-  closeCanvas(true); cancelVoice();
+  closeGenerationPreview(); closeCanvas(true); cancelVoice();
   selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
   renderRooms(); await refresh();
@@ -90,18 +90,18 @@ function renderRoom() {
   $('#goal-summary').textContent = room.goal || 'No goal set yet. Add a resolution for your workmate to aim for.';
   $('#tool-toggles').innerHTML = (me.available_tools || Object.keys(TOOL_LABELS)).map(t => `<label class="control-line"><span>${esc(TOOL_LABELS[t] || t)}</span><input type="checkbox" role="switch" data-tool="${esc(t)}" ${room.tools.includes(t) ? 'checked' : ''}></label>`).join('');
   $('#composer-hint').textContent = room.enabled ? (room.mode === 'all' ? 'Autopilot is following this group' : `Say ${room.agent_name} to bring in your workmate`) : 'Workmate off · Team chat stays open';
-  const signature = JSON.stringify(room.messages);
+  const signature = JSON.stringify([room.messages,room.jobs,room.generated_documents,room.documents.map(d=>[d.id,d.version]),room.files]);
   if (signature !== lastMessages) {
     const messages = $('#messages');
     const nearBottom = !lastMessages || messages.scrollHeight - messages.scrollTop - messages.clientHeight < 100;
-    messages.innerHTML = room.messages.length ? room.messages.map(m => `<article class="message ${m.kind === 'agent' ? 'agent' : ''}"><span class="${m.kind === 'agent' ? 'agent-avatar' : 'avatar'}">${m.kind === 'agent' ? '✳' : esc(initials(m.author))}</span><div class="content"><div class="message-header"><strong>${esc(m.author)}</strong>${m.kind === 'agent' ? '<span class="ai-label">WORKMATE</span>' : ''}<time>${esc(timestamp(m.created))}</time></div><div class="body">${messageBody(m)}</div></div></article>`).join('') : `<div class="chat-welcome"><span class="agent-avatar">✳</span><h2>This is where it starts.</h2><p>Share an idea, ask a question, or bring your team up to speed. Your conversation and your work live here.</p></div>`;
+    messages.innerHTML = room.messages.length ? room.messages.map(m => `<article class="message ${m.kind === 'agent' ? 'agent' : ''}"><span class="${m.kind === 'agent' ? 'agent-avatar' : 'avatar'}">${m.kind === 'agent' ? '✳' : esc(initials(m.author))}</span><div class="content"><div class="message-header"><strong>${esc(m.author)}</strong>${m.kind === 'agent' ? '<span class="ai-label">WORKMATE</span>' : ''}<time>${esc(timestamp(m.created))}</time></div><div class="body">${messageBody(m)}</div>${generationCardsFor(m)}</div></article>`).join('') : `<div class="chat-welcome"><span class="agent-avatar">✳</span><h2>This is where it starts.</h2><p>Share an idea, ask a question, or bring your team up to speed. Your conversation and your work live here.</p></div>`;
     lastMessages = signature;
     if (nearBottom) messages.scrollTop = messages.scrollHeight;
   }
   const active = room.jobs.filter(j => ['queued','running'].includes(j.status));
   const failure = room.jobs.find(j => ['failed','interrupted'].includes(j.status));
   $('#run-state').textContent = active.length ? `${room.agent_name} is working · ${active.length} request${active.length === 1 ? '' : 's'}` : failure && room.jobs[0]?.id === failure.id ? failure.error : '';
-  renderWork(); adminVisibility();
+  renderWork(); adminVisibility(); syncGenerationPreview();
 }
 function renderWork() {
   const root = $('#work-content');
@@ -112,7 +112,7 @@ function renderWork() {
   } else if (tab === 'activity') {
     root.innerHTML = room.actions.length ? room.actions.map(a => `<div class="activity"><strong>${esc(a.actor)} · ${esc(a.action.replaceAll('_',' '))}</strong><p>${esc(a.detail)}</p><time>${esc(date(a.created))}</time></div>`).join('') : '<p class="empty-note">Workmate actions and admin changes will appear here.</p>';
   } else {
-    root.innerHTML = `<div class="work-actions"><button class="secondary" id="new-document">＋ Document</button><button class="secondary" id="import-document">Upload ↑</button></div>` + `<h3 class="section-title">TASKS · ${room.tasks.length}</h3>` + (room.tasks.length ? room.tasks.map(t => `<label class="task ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-task="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}><div><strong>${esc(t.title)}</strong><small>${esc(t.assignee || 'Unassigned')}</small></div></label>`).join('') : '<p class="empty-note">Ask your workmate to turn the conversation into a task list.</p>') + `<h3 class="section-title">DOCUMENTS · ${room.documents.length}</h3>` + (room.documents.length ? room.documents.map(d => `<button class="document" data-document="${esc(d.id)}">▤ &nbsp; ${esc(d.title)}</button>`).join('') : '<p class="empty-note">Briefs, plans, and drafts saved by your workmate will appear here.</p>') + `<h3 class="section-title">GENERATED FILES · ${(room.files || []).length}</h3>` + (room.files || []).map(f => `<a class="file-download" href="/api/rooms/${esc(room.id)}/files/${esc(f.id)}">↓ ${esc(f.filename)} <small>${Math.ceil(f.size/1024)} KB</small></a>`).join('');
+    root.innerHTML = `<div class="work-actions"><button class="secondary" id="new-document">＋ Document</button><button class="secondary" id="import-document">Upload ↑</button></div>` + `<h3 class="section-title">TASKS · ${room.tasks.length}</h3>` + (room.tasks.length ? room.tasks.map(t => `<label class="task ${t.status === 'done' ? 'done' : ''}"><input type="checkbox" data-task="${esc(t.id)}" ${t.status === 'done' ? 'checked' : ''}><div><strong>${esc(t.title)}</strong><small>${esc(t.assignee || 'Unassigned')}</small></div></label>`).join('') : '<p class="empty-note">Ask your workmate to turn the conversation into a task list.</p>') + `<h3 class="section-title">DOCUMENTS · ${room.documents.length}</h3>` + (room.documents.length ? room.documents.map(d => `<button class="document" data-document="${esc(d.id)}">▤ &nbsp; ${esc(d.title)}</button>`).join('') : '<p class="empty-note">Briefs, plans, and drafts saved by your workmate will appear here.</p>') + `<h3 class="section-title">GENERATED FILES · ${(room.files || []).length}</h3>` + (room.files || []).map(f => `<button class="file-download" data-open-generation="file:${esc(f.id)}">Preview ${esc(f.filename)} <small>${Math.ceil(f.size/1024)} KB</small></button>`).join('');
   }
 }
 function modal(title, body, action, saveLabel = 'Save changes') {
@@ -165,7 +165,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => $('#modal').close
 $('#new-group').onclick = $('#first-group').onclick = createGroup;
 $('#configure-button').onclick = configure; $('#invite-button').onclick = invitePeople;
 $('#room-list').addEventListener('click', event => { const b = event.target.closest('[data-room]'); if (b) selectRoom(b.dataset.room); });
-$('#logout').onclick = async () => { cancelVoice(); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
+$('#logout').onclick = async () => { closeGenerationPreview(); cancelVoice(); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
 $('#password-button').onclick = () => modal('Change your password.', '<label>Current password<input name="current" type="password" autocomplete="current-password" required></label><label>New password<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="256" required></label><p class="hint">Use at least 14 characters. Other sessions will be signed out.</p>', async f => { await api('/password','POST',{current:f.get('current'),password:f.get('password')}); me = await api('/me'); toast('Password updated.'); });
 let settingsSaving = false;
 async function updateSettings(changes) {
@@ -204,9 +204,9 @@ let pendingSend;
 $('#message-form').addEventListener('submit', async event => {
   event.preventDefault(); const content = $('#message-input').value.trim(); if (!content || !selected) return;
   if (!pendingSend || pendingSend.content !== content || pendingSend.room !== selected) pendingSend = {content,room:selected,request_id:crypto.randomUUID()};
-  $('#send-button').disabled = true;
-  try { await api(`/rooms/${pendingSend.room}/messages`,'POST',pendingSend); $('#message-input').value = ''; pendingSend = null; await refresh(); $('#messages').scrollTop = $('#messages').scrollHeight; }
-  catch(error) { toast(error.message); } finally { $('#send-button').disabled = false; }
+  $('#send-button').disabled = true; startGenerationFeedback(content);
+  try { await api(`/rooms/${pendingSend.room}/messages`,'POST',pendingSend); $('#message-input').value = ''; pendingSend = null; clearGenerationFeedback(); await refresh(); $('#messages').scrollTop = $('#messages').scrollHeight; }
+  catch(error) { clearGenerationFeedback(); toast(error.message); } finally { $('#send-button').disabled = false; }
 });
 $('#message-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!$('#send-button').disabled) $('#message-form').requestSubmit(); } });
 document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; document.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('active',x === b)); renderWork(); });

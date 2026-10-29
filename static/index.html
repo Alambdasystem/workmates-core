@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143c36"><title>Workmates · A place to work together</title><link rel="stylesheet" href="/static/styles.css"><script src="/static/app.js" defer></script></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#143c36"><title>Workmates · A place to work together</title><link rel="stylesheet" href="/static/styles.css"><script src="/static/generation.js" defer></script><script src="/static/app.js" defer></script></head>
 <body>
 <div id="toast" role="status" aria-live="polite" hidden></div>
 <section id="login" class="login-shell">
@@ -20,4 +20,7 @@
 <div class="canvas-assistant"><input id="canvas-instruction" aria-label="Ask REIGN to edit" placeholder="Ask REIGN to revise this document…" maxlength="3000"><button id="canvas-ask" class="primary">Ask REIGN ↗</button></div><details class="canvas-history"><summary>Version history</summary><div id="canvas-history"></div></details>
 <p id="canvas-error" class="error" role="alert"></p></aside>
 <input type="file" id="document-upload" accept=".docx,.pdf,.md,.txt,.csv,.json" hidden>
+<dialog id="generation-preview" class="generation-preview" aria-labelledby="generation-preview-title">
+<header class="generation-preview-header"><div><span class="eyebrow" id="generation-preview-kind">LIVE PREVIEW</span><h2 id="generation-preview-title">Creating your document</h2><p id="generation-preview-status" role="status"></p></div><div class="generation-preview-actions"><select id="generation-preview-format" aria-label="Download format" hidden><option value="docx">Word</option><option value="pdf">PDF</option><option value="md">Markdown</option><option value="txt">Text</option><option value="html">HTML</option></select><button type="button" id="generation-preview-edit" class="secondary" hidden>Edit in Canvas</button><a id="generation-preview-download" class="primary" download hidden>Download ↓</a><button type="button" id="generation-preview-close" class="icon-button" aria-label="Close full screen preview">×</button></div></header>
+<div id="generation-preview-content" class="generation-preview-content"></div></dialog>
 </body></html>
