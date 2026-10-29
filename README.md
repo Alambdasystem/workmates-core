@@ -48,9 +48,9 @@ node --check static/app.js
 python -m py_compile frontend.py
 ```
 
-Seven frontend/proxy tests cover UI serving, cookies/CSRF forwarding, origin rejection, path rejection, upstream errors, redirect blocking, and HTTPS configuration. The corresponding backend has its own authorization and agent tests.
+Ten frontend/proxy tests cover UI serving, cookies/CSRF forwarding, origin rejection, path rejection, upstream errors, redirect blocking, and HTTPS configuration. The corresponding backend has its own authorization and agent tests.
 
-Browser visual testing and live OpenAI tests remain required after deployment. Chat updates by polling every two seconds; token streaming, uploads, image generation, and external work tools are not implemented in this version.
+Browser visual testing and live OpenAI tests remain required after deployment. Chat updates by polling every two seconds; token streaming is not implemented. Document uploads, hosted image/code outputs, Canvas and scoped Google Drive are available in v0.3.
 
 
 ## Voice and admin controls
@@ -58,3 +58,12 @@ Browser visual testing and live OpenAI tests remain required after deployment. C
 The composer includes opt-in microphone dictation using MediaRecorder (WebM or MP4). Stop recording to transcribe, review the draft, then Send. Browser microphone permissions are required; unsupported browsers can use their keyboard microphone. Recordings stop on group navigation, tab hiding, or after 90 seconds.
 
 The right panel exposes admin-only tool switches (web research, task creation, saved documents), autopilot, and a shared resolution goal. Calling the workmate by its name no longer requires `@`. Models displayed by the UI come from backend configuration, not a hardcoded product label. Web research source links are escaped and open with `noopener noreferrer`.
+
+
+## Document workspace and Drive
+
+The Work panel provides New document, Upload and generated file downloads. Selecting a document opens Canvas: Markdown editing with toolbar and preview, explicit Save, Word/PDF/Markdown/text/HTML downloads, version history, branching, and Ask REIGN to revise. Stale edits return a conflict and retain the draft; unsaved changes prompt before navigation. Save to Drive exports a new native Google Doc in a connected folder.
+
+The Drive tab supports multiple Google account/folder mounts per group, nested browsing and pagination, imports into Canvas and subfolder branches. Admins configure the OAuth client once and authorize accounts through Google. Folder mounting explicitly grants that group's members access to the chosen folder subtree through the connected account. Drive cannot work until that setup and consent are completed.
+
+The admin tool list comes from the backend registry, and Enable all available tools turns on every implemented tool for that group. Additional OpenAI code and image generation charges apply when used. The proxy preserves binary uploads and Content-Disposition downloads. Only Google's callback accepts query parameters and its redirect is limited to known local results.

@@ -43,7 +43,8 @@ def create_app(config=None, opener=None):
 
     @app.route('/api/<path:path>',methods=['GET','POST','PATCH','DELETE'])
     def proxy(path):
-        if '..' in path.split('/') or '\\' in path or '//' in path or request.query_string:
+        callback = path == 'integrations/google/callback' and request.method == 'GET'
+        if '..' in path.split('/') or '\\' in path or '//' in path or (request.query_string and not callback):
             abort(400,'Invalid API path.')
         if request.method!='GET':
             origin=request.headers.get('Origin')
@@ -52,14 +53,18 @@ def create_app(config=None, opener=None):
             if request.headers.get('Sec-Fetch-Site')=='cross-site':
                 abort(403,'Cross-site request rejected.')
             voice = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/transcribe') and len(path.split('/')) == 3
-            if not request.is_json and not (voice and request.mimetype.startswith('audio/')):
+            upload = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/documents/import') and len(path.split('/')) == 4
+            if not request.is_json and not (voice and request.mimetype.startswith('audio/')) and not (upload and request.mimetype == 'application/octet-stream'):
                 abort(415,'Send application/json.')
         # Validate the browser origin above, then make a server-to-server call.
         # Do not forward the frontend Host/Origin to Render's backend router.
-        forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token') if name in request.headers}
-        req=urllib.request.Request(base+'/api/'+urllib.parse.quote(path,safe='/'),method=request.method,headers=forwarded,data=request.get_data() if request.method!='GET' else None)
+        forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token','X-File-Name') if name in request.headers}
+        target = base+'/api/'+urllib.parse.quote(path,safe='/')
+        if callback:
+            target += '?' + request.query_string.decode('ascii')
+        req=urllib.request.Request(target,method=request.method,headers=forwarded,data=request.get_data() if request.method!='GET' else None)
         try:
-            upstream=http.open(req,timeout=100 if path.endswith('/transcribe') else 30)
+            upstream=http.open(req,timeout=100 if path.endswith('/transcribe') or '/drive/' in path else 45)
         except urllib.error.HTTPError as exc:
             upstream=exc
         except (urllib.error.URLError,TimeoutError,OSError):
@@ -67,11 +72,16 @@ def create_app(config=None, opener=None):
         with upstream:
             status=upstream.code
             if 300<=status<400:
+                location = upstream.headers.get('Location', '')
+                if callback and location in ('/#drive=connected', '/#drive=failed'):
+                    return Response(status=302, headers={'Location': location})
                 return jsonify(error='Unexpected backend redirect.'),502
-            body=upstream.read(5*1024*1024+1)
-            if len(body)>5*1024*1024:
+            body=upstream.read(12*1024*1024+1)
+            if len(body)>12*1024*1024:
                 return jsonify(error='Backend response too large.'),502
             result=Response(body,status=status,content_type=upstream.headers.get('Content-Type','application/json'))
+            if upstream.headers.get('Content-Disposition'):
+                result.headers['Content-Disposition'] = upstream.headers['Content-Disposition']
             for cookie in upstream.headers.get_all('Set-Cookie',[]):
                 result.headers.add('Set-Cookie',cookie)
             return result
