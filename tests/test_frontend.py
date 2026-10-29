@@ -75,4 +75,18 @@ class FrontendTests(unittest.TestCase):
         self.http.open=evil
         self.assertEqual(self.c.get('/api/integrations/google/callback?state=test').status_code,502)
 
+    def test_inline_preview_preserves_sandbox_and_image_content_type(self):
+        def preview(*a,**k):
+            r=Upstream(b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+            r.headers.replace_header('Content-Type','image/svg+xml')
+            r.headers['Content-Disposition']='inline; filename=preview.svg'
+            r.headers['Content-Security-Policy']="sandbox; default-src 'none'"
+            return r
+        self.http.open=preview
+        response=self.c.get('/api/rooms/room/files/file/preview')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.mimetype,'image/svg+xml')
+        self.assertEqual(response.headers['Content-Security-Policy'],"sandbox; default-src 'none'")
+        self.assertIn('inline;',response.headers['Content-Disposition'])
+
 if __name__=='__main__':unittest.main()
