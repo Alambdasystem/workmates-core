@@ -40,7 +40,7 @@ function endLive(message='Voice ended. Your saved conversation is still here.'){
  if(liveChannel){liveChannel.onmessage=null;liveChannel.onclose=null;liveChannel.close();}liveChannel=null;
  if(livePeer){livePeer.onconnectionstatechange=null;livePeer.close();}livePeer=null;
  const audio=document.querySelector('#solo-audio');audio.pause();audio.srcObject=null;
- liveStarting=false;liveMuted=false;document.querySelector('#live-start').textContent='☎ Call again';document.querySelector('#live-mute').hidden=true;document.querySelector('#live-speaker').hidden=true;document.querySelector('#reign-eye').classList.remove('listening','speaking');liveState(message);
+ liveStarting=false;liveMuted=false;document.querySelector('#live-start').textContent='☎ Call again';document.querySelector('#live-mute').hidden=true;document.querySelector('#live-mute').textContent='Mute microphone';document.querySelector('#live-mute').setAttribute('aria-pressed','false');document.querySelector('#live-speaker').hidden=true;document.querySelector('#reign-eye').classList.remove('listening','speaking');liveState(message);
 }
 async function startLive(){
  if(livePeer||liveStarting){endLive();return;}
