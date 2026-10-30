@@ -2,7 +2,7 @@
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let me, rooms = [], room, selected, tab = 'work', lastMessages = '', refreshing = false, saveAction;
-const TOOL_LABELS = {web_search:'Web research',create_task:'Create tasks',update_task:'Update tasks',search_documents:'Search group documents',save_document:'Create Word / PDF / Canvas',read_document:'Read group documents',update_document:'Edit Canvas documents',branch_document:'Branch documents',code_interpreter:'Code execution & data files',image_generation:'Generate images',drive_list:'Browse connected Drive folders',drive_read:'Read Drive documents',drive_save:'Save Google Docs',drive_branch:'Create Drive subfolders'};
+const TOOL_LABELS = {drive_save_file:'Copy images & files to Drive',list_saved_files:'Find saved images & files',read_saved_image:'Look at saved images',create_image_document:'Word documents with images',create_presentation:'PowerPoint with image backgrounds',create_slideshow:'MP4 slideshows & transitions',generate_images:'Generate image batches',web_search:'Web research',create_task:'Create tasks',update_task:'Update tasks',search_documents:'Search group documents',save_document:'Create Word / PDF / Canvas',read_document:'Read group documents',update_document:'Edit Canvas documents',branch_document:'Branch documents',code_interpreter:'Code execution & data files',image_generation:'Generate images',drive_list:'Browse connected Drive folders',drive_read:'Read Drive documents',drive_save:'Save Google Docs',drive_branch:'Create Drive subfolders'};
 const invitation = new URLSearchParams(location.hash.slice(1));
 const inviteToken = invitation.get('invite');
 if (inviteToken) {
@@ -19,7 +19,7 @@ async function api(path, method = 'GET', body) {
   const response = await fetch('/api' + path, {method, headers: {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}, body:body === undefined ? undefined : JSON.stringify(body)});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && me) { closeGenerationPreview(); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
+    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
     throw new Error(value.error || 'Request failed.');
   }
   return value;
@@ -56,7 +56,7 @@ function renderRooms() {
 }
 async function selectRoom(id) {
   if (canvasDirty() && !confirm('Leave your unsaved document edits?')) return;
-  closeGenerationPreview(); closeCanvas(true); cancelVoice();
+  closeGenerationPreview(); clearAssetSelection(); closeCanvas(true); cancelVoice();
   selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
   renderRooms(); await refresh();
@@ -90,7 +90,7 @@ function renderRoom() {
   $('#goal-summary').textContent = room.goal || 'No goal set yet. Add a resolution for your workmate to aim for.';
   $('#tool-toggles').innerHTML = (me.available_tools || Object.keys(TOOL_LABELS)).map(t => `<label class="control-line"><span>${esc(TOOL_LABELS[t] || t)}</span><input type="checkbox" role="switch" data-tool="${esc(t)}" ${room.tools.includes(t) ? 'checked' : ''}></label>`).join('');
   $('#composer-hint').textContent = room.enabled ? (room.mode === 'all' ? 'Autopilot is following this group' : `Say ${room.agent_name} to bring in your workmate`) : 'Workmate off · Team chat stays open';
-  const signature = JSON.stringify([room.messages,room.jobs,room.generated_documents,room.documents.map(d=>[d.id,d.version]),room.files]);
+  const signature = JSON.stringify([room.messages,room.jobs,room.generated_documents,room.documents.map(d=>[d.id,d.version]),room.files,room.drive_copies]);
   if (signature !== lastMessages) {
     const messages = $('#messages');
     const nearBottom = !lastMessages || messages.scrollHeight - messages.scrollTop - messages.clientHeight < 100;
@@ -100,7 +100,7 @@ function renderRoom() {
   }
   const active = room.jobs.filter(j => ['queued','running'].includes(j.status));
   const failure = room.jobs.find(j => ['failed','interrupted'].includes(j.status));
-  $('#run-state').textContent = active.length ? `${room.agent_name} is working · ${active.length} request${active.length === 1 ? '' : 's'}` : failure && room.jobs[0]?.id === failure.id ? failure.error : '';
+  $('#run-state').textContent = active.length ? `${room.agent_name} · ${active.find(j=>j.progress)?.progress || `${active.length} request${active.length === 1 ? '' : 's'} in progress`}` : failure && room.jobs[0]?.id === failure.id ? failure.error : '';
   renderWork(); adminVisibility(); syncGenerationPreview();
 }
 function renderWork() {
@@ -165,7 +165,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => $('#modal').close
 $('#new-group').onclick = $('#first-group').onclick = createGroup;
 $('#configure-button').onclick = configure; $('#invite-button').onclick = invitePeople;
 $('#room-list').addEventListener('click', event => { const b = event.target.closest('[data-room]'); if (b) selectRoom(b.dataset.room); });
-$('#logout').onclick = async () => { closeGenerationPreview(); cancelVoice(); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
+$('#logout').onclick = async () => { closeGenerationPreview(); clearAssetSelection(); cancelVoice(); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
 $('#password-button').onclick = () => modal('Change your password.', '<label>Current password<input name="current" type="password" autocomplete="current-password" required></label><label>New password<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="256" required></label><p class="hint">Use at least 14 characters. Other sessions will be signed out.</p>', async f => { await api('/password','POST',{current:f.get('current'),password:f.get('password')}); me = await api('/me'); toast('Password updated.'); });
 let settingsSaving = false;
 async function updateSettings(changes) {
@@ -185,7 +185,8 @@ $('#autopilot-toggle').onchange = async event => {
 };
 $('#tool-toggles').onchange = async event => {
   const tool = event.target.dataset.tool; if (!tool) return;
-  const tools = event.target.checked ? [...new Set([...room.tools,tool])] : room.tools.filter(t => t !== tool);
+  let tools = event.target.checked ? [...new Set([...room.tools,tool])] : room.tools.filter(t => t !== tool);
+  if (tool==='image_generation') tools=event.target.checked?[...new Set([...tools,'generate_images'])]:tools.filter(t=>t!=='generate_images');
   try { await updateSettings({tools}); toast('Tool settings saved.'); } catch(e) { toast(e.message); await refresh(); }
 };
 $('#goal-button').onclick = () => {
@@ -203,9 +204,9 @@ $('#toggle-agent').onclick = async () => {
 let pendingSend;
 $('#message-form').addEventListener('submit', async event => {
   event.preventDefault(); const content = $('#message-input').value.trim(); if (!content || !selected) return;
-  if (!pendingSend || pendingSend.content !== content || pendingSend.room !== selected) pendingSend = {content,room:selected,request_id:crypto.randomUUID()};
+  if (!pendingSend || pendingSend.content !== content || pendingSend.room !== selected || JSON.stringify(pendingSend.attachment_ids || []) !== JSON.stringify(selectedAssetIds)) pendingSend = {content,room:selected,attachment_ids:[...selectedAssetIds],request_id:crypto.randomUUID()};
   $('#send-button').disabled = true; startGenerationFeedback(content);
-  try { await api(`/rooms/${pendingSend.room}/messages`,'POST',pendingSend); $('#message-input').value = ''; pendingSend = null; clearGenerationFeedback(); await refresh(); $('#messages').scrollTop = $('#messages').scrollHeight; }
+  try { await api(`/rooms/${pendingSend.room}/messages`,'POST',pendingSend); $('#message-input').value = ''; selectedAssetIds=selectedAssetIds.filter(id=>!pendingSend.attachment_ids.includes(id)); renderAssetSelection(); pendingSend = null; clearGenerationFeedback(); await refresh(); $('#messages').scrollTop = $('#messages').scrollHeight; }
   catch(error) { clearGenerationFeedback(); toast(error.message); } finally { $('#send-button').disabled = false; }
 });
 $('#message-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (!$('#send-button').disabled) $('#message-form').requestSubmit(); } });

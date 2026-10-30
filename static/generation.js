@@ -4,9 +4,9 @@ let generationPreview = null, generationPreviewRevision = '', generationPreviewR
 function generationKind(content) {
   if (!/\b(make|create|generate|draw|design|build|produce|draft|write|render|edit|revise)\b/i.test(content || '')) return null;
   if (/\b(diagram|flowchart|architecture|schematic|mind ?map)\b/i.test(content)) return 'diagram';
-  if (/\b(picture|image|photo|illustration|logo|artwork|poster)\b/i.test(content)) return 'image';
-  if (/\b(word|document|docx|report|proposal|brief|memo|pdf)\b/i.test(content)) return 'document';
-  if (/\b(file|csv|spreadsheet|chart|presentation|slides)\b/i.test(content)) return 'file';
+  if (/\b(pictures?|images?|photos?|illustrations?|logos?|artwork|posters?)\b/i.test(content)) return 'image';
+  if (/\b(word|documents?|docx|reports?|proposals?|briefs?|memos?|pdf)\b/i.test(content)) return 'document';
+  if (/\b(files?|csv|spreadsheets?|charts?|presentations?|slides?|videos?|mp4|slideshow)\b/i.test(content)) return 'file';
   return null;
 }
 function isGenerationImage(file) {
@@ -17,10 +17,10 @@ function generationArt(kind) {
   if (kind === 'diagram') return '<span class="manifest-diagram"><i></i><i></i><i></i><b></b><b></b></span>';
   return '<span class="manifest-sheet"><i></i><i></i><i></i><i></i><i></i><b>✦</b></span>';
 }
-function generationLoading(kind, status='running', error='') {
+function generationLoading(kind, status='running', error='', progress='') {
   const stopped = !['queued','running'].includes(status);
   const title = stopped ? (status === 'completed' ? 'No preview was produced' : 'Generation stopped') : ({image:'Bringing your image to life',diagram:'Connecting your ideas',document:'Your document is taking shape',file:'Building your file'}[kind] || 'Creating your work');
-  return `<div class="manifest-stage ${stopped?'manifest-stopped':''}"><div class="manifest-object" aria-hidden="true">${generationArt(kind)}</div><strong>${esc(title)}</strong><span>${esc(stopped ? (error || 'Your conversation and saved work are still here.') : status==='queued'?'Queued · waiting for REIGN':'Generating · the preview appears when content is saved')}</span>${stopped?'':'<span class="manifest-dots" aria-hidden="true"><i></i><i></i><i></i></span>'}</div>`;
+  return `<div class="manifest-stage ${stopped?'manifest-stopped':''}"><div class="manifest-object" aria-hidden="true">${generationArt(kind)}</div><strong>${esc(title)}</strong><span>${esc(stopped ? (error || 'Your conversation and saved work are still here.') : progress || (status==='queued'?'Queued · waiting for REIGN':'Generating · the preview appears when content is saved'))}</span>${stopped?'':'<span class="manifest-dots" aria-hidden="true"><i></i><i></i><i></i></span>'}</div>`;
 }
 function generationOutputCard(kind, id) {
   const doc = kind === 'document' ? room.documents.find(d=>d.id===id) : null;
@@ -31,7 +31,7 @@ function generationOutputCard(kind, id) {
   if (doc) art = `<div class="document-miniature formatted" aria-hidden="true" inert><strong>${esc(doc.title)}</strong>${markdown(doc.body.slice(0,1800))}</div>`;
   else if (isGenerationImage(file)) art = `<img class="generation-image" src="/api/rooms/${esc(room.id)}/files/${esc(file.id)}/preview" alt="${esc(title)}" loading="lazy" decoding="async">`;
   else art = `<div class="generation-file-symbol" aria-hidden="true">${/\.csv$/i.test(title)?'▦':'▤'}<span>${esc(title.split('.').pop().toUpperCase())}</span></div>`;
-  return `<button type="button" class="generation-card generation-ready ${doc?'generation-document':''}" data-open-generation="${kind}:${esc(id)}" aria-label="Open full screen preview of ${esc(title)}"><div class="generation-card-art">${art}<span class="generation-expand" aria-hidden="true">⤢</span></div><div class="generation-card-caption"><span><strong>${esc(title)}</strong><small>${doc?'DOCUMENT · WORD / PDF':isGenerationImage(file)?'IMAGE / DIAGRAM':'GENERATED FILE'} · Preview & download</small></span><b aria-hidden="true">↗</b></div></button>`;
+  return `<div class="generation-asset"><button type="button" class="generation-card generation-ready ${doc?'generation-document':''}" data-open-generation="${kind}:${esc(id)}" aria-label="Open full screen preview of ${esc(title)}"><div class="generation-card-art">${art}<span class="generation-expand" aria-hidden="true">⤢</span></div><div class="generation-card-caption"><span><strong>${esc(title)}</strong><small>${doc?'DOCUMENT · WORD / PDF':isGenerationImage(file)?'IMAGE / DIAGRAM':'GENERATED FILE'} · Preview & download</small></span><b aria-hidden="true">↗</b></div></button>${file?assetActionBar(file):''}</div>`;
 }
 function generationCardsFor(message) {
   let cards = '';
@@ -41,7 +41,8 @@ function generationCardsFor(message) {
     cards = docs.map(o=>generationOutputCard('document',o.document_id)).join('') + files.map(f=>generationOutputCard('file',f.id)).join('');
     const job = room.jobs.find(j=>j.message_id===message.id && j.status!=='chat_only');
     const kind = generationKind(message.content);
-    if (job && kind && !cards) cards = `<button type="button" class="generation-card generation-loading" data-open-generation="job:${esc(job.id)}" aria-label="Open generation preview">${generationLoading(kind,job.status,job.error)}</button>`;
+    if (job && kind && cards && ['queued','running'].includes(job.status) && job.progress) cards += `<div class="generation-card generation-loading">${generationLoading(kind,job.status,job.error,job.progress)}</div>`;
+    if (job && kind && !cards) cards = `<button type="button" class="generation-card generation-loading" data-open-generation="job:${esc(job.id)}" aria-label="Open generation preview">${generationLoading(kind,job.status,job.error,job.progress)}</button>`;
   } else {
     // Older documents predate explicit output tracking; their real links identify them.
     cards = room.documents.filter(d=>message.content.includes(d.id) && !(room.generated_documents || []).some(o=>o.document_id===d.id)).map(d=>generationOutputCard('document',d.id)).join('');
@@ -49,6 +50,7 @@ function generationCardsFor(message) {
   return cards ? '<div class="generation-cards">'+cards+'</div>' : '';
 }
 function generationAttachmentCards(message) {
+  if (message.kind==='human') return renderMessageAssets(message);
   return (message.attachments || []).filter(a=>{
     const file = (room.files || []).find(f=>f.id===a.id);
     return !file || !room.messages.some(m=>m.id===file.message_id);
@@ -87,10 +89,11 @@ async function syncGenerationPreview() {
   }
   const doc=kind==='document'?room.documents.find(d=>d.id===id):null;
   const file=kind==='file'?(room.files || []).find(f=>f.id===id):null;
-  const signature=JSON.stringify([kind,id,doc?.version,job?.status,job?.error]);
+  const signature=JSON.stringify([kind,id,doc?.version,job?.status,job?.error,job?.progress]);
   if (signature===generationPreviewRevision) return;
   generationPreviewRevision=signature; const request=++generationPreviewRequest;
   const content=$('#generation-preview-content'), download=$('#generation-preview-download');
+  $('#generation-preview-use').hidden=!file || !isReusableImage(file); $('#generation-preview-drive').hidden=!file;
   $('#generation-preview-format').hidden=!doc; $('#generation-preview-edit').hidden=!doc; download.hidden=!doc&&!file;
   $('#generation-preview-kind').textContent=doc?'DOCUMENT PREVIEW':file?'GENERATED FILE':'GENERATION PREVIEW';
   $('#generation-preview-title').textContent=doc?.title || file?.filename || 'Creating your work';
@@ -101,19 +104,22 @@ async function syncGenerationPreview() {
     updateGenerationDownload();
   } else if (file) {
     download.href=`/api/rooms/${selected}/files/${file.id}`; download.download=file.filename;
-    if (isGenerationImage(file)) {
+    if (file.mime==='video/mp4' || /\.mp4$/i.test(file.filename)) {
+      content.innerHTML=`<div class="full-image-preview"><video controls playsinline preload="metadata" src="/api/rooms/${selected}/files/${file.id}/preview"></video></div>`;
+    } else if (isGenerationImage(file)) {
       content.innerHTML=`<div class="full-image-preview"><img src="/api/rooms/${selected}/files/${file.id}/preview" alt="${esc(file.filename)}"></div>`;
     } else {
       content.innerHTML='<p class="preview-note" role="status">Opening your file preview…</p>';
       try {
         const value=await api(`/rooms/${selected}/files/${file.id}/preview`);
         if (request!==generationPreviewRequest || !generationPreview) return;
+        if (['presentation','image_document'].includes(value.kind)) { content.innerHTML=renderCompositionPreview(value); return; }
         content.innerHTML=`<article class="full-document-preview"><h1>${esc(file.filename)}</h1>${value.kind==='document'?`<p class="preview-note">Text preview · download the original for its full layout.</p><div class="formatted">${markdown(value.body)}</div>`:`<pre class="full-text-preview">${esc(value.body)}</pre>`}</article>`;
       } catch(e) { if (request===generationPreviewRequest) content.innerHTML=`<p class="preview-note">${esc(e.message)} You can still download the original.</p>`; }
     }
   } else {
     const message=room.messages.find(m=>m.id===job?.message_id);
-    content.innerHTML='<div class="full-generation-loading">'+generationLoading(generationKind(message?.content) || 'document',job?.status || 'interrupted',job?.error)+'</div>';
+    content.innerHTML='<div class="full-generation-loading">'+generationLoading(generationKind(message?.content) || 'document',job?.status || 'interrupted',job?.error,job?.progress)+'</div>';
     if (job && !['queued','running'].includes(job.status)) $('#generation-preview-status').textContent='Generation finished without a preview';
   }
 }
