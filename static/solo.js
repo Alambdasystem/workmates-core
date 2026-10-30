@@ -37,6 +37,7 @@ async function saveLiveTurn(role,text,eventId,rid){
  try{await api(`/rooms/${rid}/live/transcript`,'POST',{role,text:text.slice(0,8000),event_id:eventId.slice(0,100)});if(selected===rid)await refresh();}catch{liveTurns.delete(eventId);liveState('This transcript could not be saved. Copy it before leaving.');}
 }
 function endLive(message='Voice ended. Your saved conversation is still here.',failed=false){
+ if(typeof closeCallFile==='function')closeCallFile();
  liveAudioMonitor?.();liveOrbMeter?.();liveAudioMonitor=null;liveOrbMeter=null;
  callStage(failed?'failed':'ended');stopRingtone();liveEpoch++;clearTimeout(liveConnectTimer);liveConnectTimer=null;clearTimeout(liveTimer);liveTimer=null;
  liveStream?.getTracks().forEach(track=>track.stop());liveStream=null;
@@ -68,6 +69,7 @@ async function startLive(){
    if(value.type==='response.output_audio_transcript.delta'||value.type==='response.output_text.delta'){liveCaption+=value.delta||'';document.querySelector('#solo-caption').textContent=liveCaption;document.querySelector('#reign-eye').classList.remove('thinking');document.querySelector('#reign-eye').classList.add('speaking');liveState(room.agent_name+' is speaking…');}
    if(value.type==='response.output_audio_transcript.done'||value.type==='response.output_text.done'){saveLiveTurn('assistant',value.transcript||value.text||liveCaption,'assistant-'+(value.item_id||value.response_id||crypto.randomUUID()),rid);}
    if(value.type==='conversation.item.input_audio_transcription.completed'){saveLiveTurn('user',value.transcript,'user-'+value.item_id,rid);}
+   if(value.type==='response.function_call_arguments.done'&&typeof runCallFileTool==='function')runCallFileTool(value,epoch);
    if(value.type==='response.done'){document.querySelector('#reign-eye').classList.remove('speaking','thinking');liveState(liveMuted?'Microphone muted · you can type below.':'Listening · speak naturally.');}
    if(value.type==='error'){endLive(value.error?.message||'The voice service reported an error. Please try again.',true);}
   };

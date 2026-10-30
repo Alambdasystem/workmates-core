@@ -27,6 +27,7 @@ async function openMeeting(){
 }
 async function closeMeeting(force=false){
  if(!force&&(meetingClip||meetingRecorder?.state==='recording')&&!confirm('Discard the unsaved call clip and leave?'))return false;
+ if(typeof closeCallFile==='function')closeCallFile();
  const old=meeting;await stopMeetingScreen(false);meetingScreenStreams.clear();meetingEpoch++;clearInterval(meetingTimer);meetingTimer=null;clearTimeout(meetingConnecting);meetingConnecting=null;
  if(meetingRecorder?.state==='recording')meetingRecorder.stop();meetingRecorder=null;meetingClip=null;
  meetingCleanupAudio?.();meetingCleanupMeter?.();meetingCleanupAudio=null;meetingCleanupMeter=null;
@@ -77,7 +78,7 @@ async function pollMeeting(){
   for(const person of result.participants)addMeetingPeer(person);
   for(const [id,item]of meetingPeers){if(!result.participants.some(p=>p.id===id)){item.peer.close();meetingPeers.delete(id);for(const [key,audio]of meetingAudio){if(key.startsWith(id+':')){audio.pause();audio.remove();meetingAudio.delete(key);meetingHumanSources.get(key)?.disconnect();meetingHumanSources.delete(key);}}}}
   for(const signal of result.signals||[]){try{await receiveMeetingSignal(signal);}catch(e){meetingStatus('Participant connection issue: '+e.message);}meeting.signalCursor=Math.max(meeting.signalCursor,signal.id);}
-  await renderMeeting(result);renderMeetingScreen();
+  await renderMeeting(result);renderMeetingScreen();if(typeof followCallFileStage==='function')followCallFileStage(result);
   for(const event of result.events){if(meetingSeenEvents.has(event.id))continue;if(event.kind==='question'&&meetingIsHost()&&meetingAgentChannel?.readyState!=='open')continue;meetingSeenEvents.add(event.id);
    if(event.kind==='question'&&meetingIsHost()&&meetingAgentChannel?.readyState==='open'){meetingSendAgent({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text:event.payload.author+': '+event.payload.text}]}});meetingSendAgent({type:'response.create'});}
    if(event.kind==='invitation_requested'&&meetingIsHost()){document.querySelector('#meeting-invite-request').hidden=false;document.querySelector('#meeting-invite-request-text').textContent='REIGN asked to bring '+event.payload.name+' in. Choose and confirm the recipient before sending an invite.';}
