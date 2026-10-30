@@ -54,8 +54,9 @@ def create_app(config=None, opener=None):
                 abort(403,'Cross-site request rejected.')
             voice = request.method == 'POST' and path.startswith('rooms/') and (path.endswith('/transcribe') or path.endswith('/voice')) and len(path.split('/')) == 3
             upload = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/documents/import') and len(path.split('/')) == 4
+            clip = request.method == 'POST' and len(path.split('/')) == 6 and path.split('/')[0] == 'rooms' and path.split('/')[2] == 'calls' and path.split('/')[4] == 'clip' and request.mimetype.startswith('audio/')
             background = request.method == 'PUT' and path == 'preferences/background/image' and request.mimetype in ('image/png','image/jpeg','image/webp')
-            if not request.is_json and not background and not (voice and request.mimetype.startswith('audio/')) and not (upload and request.mimetype == 'application/octet-stream'):
+            if not request.is_json and not clip and not background and not (voice and request.mimetype.startswith('audio/')) and not (upload and request.mimetype == 'application/octet-stream'):
                 abort(415,'Send application/json.')
         # Validate the browser origin above, then make a server-to-server call.
         # Do not forward the frontend Host/Origin to Render's backend router.
