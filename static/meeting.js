@@ -1,5 +1,5 @@
 'use strict';
-let meeting=null,meetingEpoch=0,meetingTimer=null,meetingPolling=false,meetingPeers=new Map(),meetingAudio=new Map(),meetingHumanSources=new Map(),meetingStream=null,meetingContext=null,meetingMix=null,meetingRecordMix=null,meetingAgentPeer=null,meetingAgentChannel=null,meetingAgentStream=null,meetingAgentForward=null,meetingVersion='',meetingItem=null,meetingItemKey='',meetingSeenEvents=new Set(),meetingMuted=false,meetingRecorder=null,meetingClip=null,meetingCaption='',meetingCleanupAudio=null,meetingCleanupMeter=null,meetingConnecting=null,meetingAgentSource=null;
+let meeting=null,meetingEpoch=0,meetingTimer=null,meetingPolling=false,meetingPeers=new Map(),meetingAudio=new Map(),meetingHumanSources=new Map(),meetingStream=null,meetingContext=null,meetingMix=null,meetingRecordMix=null,meetingAgentPeer=null,meetingAgentChannel=null,meetingAgentStream=null,meetingAgentForward=null,meetingVersion='',meetingItem=null,meetingItemKey='',meetingSeenEvents=new Set(),meetingMuted=false,meetingRecorder=null,meetingClip=null,meetingCaption='',meetingCleanupAudio=null,meetingCleanupMeter=null,meetingConnecting=null,meetingAgentSource=null,meetingScreen=null,meetingScreenBusy=false,meetingScreenStreams=new Map();
 function meetingViewKey(value){return `${value.version}:${value.stage.asset_id||''}:${value.stage.page||0}:${value.stage.highlight||''}`;}
 function meetingPageHTML(page,rid){
  const image=page.image_id?`<img data-walk-field="image" src="/api/rooms/${esc(rid)}/files/${esc(page.image_id)}/preview" alt="${esc(page.title||'Shared image')}">`:'';
@@ -27,7 +27,7 @@ async function openMeeting(){
 }
 async function closeMeeting(force=false){
  if(!force&&(meetingClip||meetingRecorder?.state==='recording')&&!confirm('Discard the unsaved call clip and leave?'))return false;
- const old=meeting;meetingEpoch++;clearInterval(meetingTimer);meetingTimer=null;clearTimeout(meetingConnecting);meetingConnecting=null;
+ const old=meeting;await stopMeetingScreen(false);meetingScreenStreams.clear();meetingEpoch++;clearInterval(meetingTimer);meetingTimer=null;clearTimeout(meetingConnecting);meetingConnecting=null;
  if(meetingRecorder?.state==='recording')meetingRecorder.stop();meetingRecorder=null;meetingClip=null;
  meetingCleanupAudio?.();meetingCleanupMeter?.();meetingCleanupAudio=null;meetingCleanupMeter=null;
  stopMeetingReign();
@@ -42,12 +42,15 @@ function addMeetingPeer(person){
  if(meetingPeers.has(person.id)||person.id===meeting.participant_id)return meetingPeers.get(person.id);
  const peer=new RTCPeerConnection({iceServers:meeting.ice_servers||[{urls:'stun:stun.l.google.com:19302'}]});const item={peer,makingOffer:false,ignoreOffer:false,polite:meeting.participant_id>person.id,candidates:[],agentStreamId:null,forwarded:false};meetingPeers.set(person.id,item);
  for(const track of meetingStream.getAudioTracks())peer.addTrack(track,meetingStream);
+ if(meetingScreen)for(const track of meetingScreen.getVideoTracks())peer.addTrack(track,meetingScreen);
  if(meetingIsHost()&&meetingAgentForward){peer.addTrack(meetingAgentForward.getAudioTracks()[0],meetingAgentForward);item.forwarded=true;}
  peer.onicecandidate=event=>{if(event.candidate)sendMeetingSignal(person.id,{candidate:event.candidate.toJSON()}).catch(()=>{});};
  peer.onnegotiationneeded=async()=>{try{item.makingOffer=true;await peer.setLocalDescription();await sendMeetingSignal(person.id,{description:peer.localDescription,agent_stream_id:meetingAgentForward?.id||null});}catch(e){meetingStatus('A participant could not connect: '+e.message);}finally{item.makingOffer=false;}};
  peer.onconnectionstatechange=()=>{if(peer.connectionState==='failed')meetingStatus('A participant audio connection failed. Restrictive networks may require a configured TURN relay. Rejoin to retry.');};
  peer.ontrack=event=>{
-  const stream=event.streams[0]||new MediaStream([event.track]);const key=person.id+':'+stream.id;if(meetingAudio.has(key))return;
+  const stream=event.streams[0]||new MediaStream([event.track]);
+  if(event.track.kind==='video'){meetingScreenStreams.set(person.id,{stream,track:event.track});event.track.onended=()=>{meetingScreenStreams.delete(person.id);renderMeetingScreen();};renderMeetingScreen();return;}
+  const key=person.id+':'+stream.id;if(meetingAudio.has(key))return;
   const audio=document.createElement('audio');audio.autoplay=true;audio.playsInline=true;audio.srcObject=stream;audio.dataset.peer=person.id;document.querySelector('#meeting-audio-sinks').append(audio);meetingAudio.set(key,audio);audio.play().catch(()=>{document.querySelector('#meeting-enable-audio').hidden=false;});
   const isAgent=stream.id===item.agentStreamId;
   if(!isAgent&&meetingIsHost()&&meetingContext){const source=meetingContext.createMediaStreamSource(stream);source.connect(meetingMix);source.connect(meetingRecordMix);meetingHumanSources.set(key,source);}
@@ -74,7 +77,7 @@ async function pollMeeting(){
   for(const person of result.participants)addMeetingPeer(person);
   for(const [id,item]of meetingPeers){if(!result.participants.some(p=>p.id===id)){item.peer.close();meetingPeers.delete(id);for(const [key,audio]of meetingAudio){if(key.startsWith(id+':')){audio.pause();audio.remove();meetingAudio.delete(key);meetingHumanSources.get(key)?.disconnect();meetingHumanSources.delete(key);}}}}
   for(const signal of result.signals||[]){try{await receiveMeetingSignal(signal);}catch(e){meetingStatus('Participant connection issue: '+e.message);}meeting.signalCursor=Math.max(meeting.signalCursor,signal.id);}
-  await renderMeeting(result);
+  await renderMeeting(result);renderMeetingScreen();
   for(const event of result.events){if(meetingSeenEvents.has(event.id))continue;if(event.kind==='question'&&meetingIsHost()&&meetingAgentChannel?.readyState!=='open')continue;meetingSeenEvents.add(event.id);
    if(event.kind==='question'&&meetingIsHost()&&meetingAgentChannel?.readyState==='open'){meetingSendAgent({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text:event.payload.author+': '+event.payload.text}]}});meetingSendAgent({type:'response.create'});}
    if(event.kind==='invitation_requested'&&meetingIsHost()){document.querySelector('#meeting-invite-request').hidden=false;document.querySelector('#meeting-invite-request-text').textContent='REIGN asked to bring '+event.payload.name+' in. Choose and confirm the recipient before sending an invite.';}
@@ -144,6 +147,46 @@ async function startMeetingClip(){
 function stopMeetingClip(){if(meetingRecorder?.state==='recording')meetingRecorder.stop();if(meeting&&meetingIsHost())meetingRequest('/recording',{recording:false}).catch(()=>{});}
 async function saveMeetingClip(){if(!meetingClip||!meeting)return;try{const r=await fetch('/api'+meetingPath('/clip/'+meetingClip.id),{method:'POST',headers:{'Content-Type':meetingClip.blob.type,'X-CSRF-Token':me.csrf,'X-Request-ID':meetingClip.nonce,'X-Audio-Duration':String(meetingClip.duration)},body:meetingClip.blob});const value=await r.json();if(!r.ok)throw new Error(value.error);meetingClip=null;document.querySelector('#meeting-clip-draft').hidden=true;toast('Call clip saved in this group.');}catch(e){toast(e.message);}}
 
+
+function meetingScreenOwner(value,pid,sid){return !!value?.presentation&&value.presentation.participant_id===pid&&value.presentation.stream_id===sid;}
+function renderMeetingScreen(){
+ const video=document.querySelector('#meeting-screen-video'),panel=document.querySelector('#meeting-screen-panel'),shared=meeting?.presentation;
+ const local=shared?.participant_id===meeting?.participant_id;
+ const remote=shared?meetingScreenStreams.get(shared.participant_id):null;
+ const stream=local?meetingScreen:remote?.stream;
+ const authorized=shared&&stream&&meetingScreenOwner(meeting,shared.participant_id,stream.id);
+ panel.hidden=!shared;document.querySelector('#meeting-shared-document').hidden=!!shared;
+ document.querySelector('#meeting-presenter').textContent=shared?shared.name+' is presenting'+(authorized?'':' · connecting screen…'):'';
+ if(authorized&&video.srcObject!==stream){video.srcObject=stream;video.muted=true;video.play().catch(()=>{});}
+ if(!authorized&&video.srcObject){video.pause();video.srcObject=null;}
+ document.querySelector('#meeting-screen-placeholder').hidden=!!authorized;
+ document.querySelector('#meeting-share-screen').textContent=meetingScreen?'Stop sharing':'Share screen';
+ document.querySelector('#meeting-share-screen').setAttribute('aria-pressed',String(!!meetingScreen));
+ document.querySelector('#meeting-share-screen').disabled=meetingScreenBusy||!!(shared&&!local);
+}
+async function stopMeetingScreen(notify=true){
+ const stream=meetingScreen;meetingScreen=null;
+ if(stream){for(const track of stream.getTracks()){track.onended=null;track.stop();for(const item of meetingPeers.values())for(const sender of item.peer.getSenders())if(sender.track===track)item.peer.removeTrack(sender);}}
+ if(notify&&meeting&&stream){try{const result=await meetingRequest('/presentation',{sharing:false});meeting.presentation=result.presentation;}catch(e){meetingStatus('Screen stopped. Shared status will clear when your participant leaves.');}}
+ renderMeetingScreen();
+}
+async function toggleMeetingScreen(){
+ if(!meeting||meetingScreenBusy)return;
+ if(meetingScreen){await stopMeetingScreen();return;}
+ if(!navigator.mediaDevices?.getDisplayMedia){toast('Screen sharing is unavailable in this browser. Join from a supported desktop browser to present. You can still view shared work here.');return;}
+ const active=meeting,epoch=meetingEpoch;meetingScreenBusy=true;renderMeetingScreen();let stream;
+ try{
+  stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:30}},audio:false});
+  if(epoch!==meetingEpoch||!meeting||meeting.id!==active.id){stream.getTracks().forEach(t=>t.stop());return;}
+  const result=await meetingRequest('/presentation',{sharing:true,stream_id:stream.id});
+  if(epoch!==meetingEpoch){stream.getTracks().forEach(t=>t.stop());return;}
+  meeting.presentation=result.presentation;meetingScreen=stream;
+  for(const item of meetingPeers.values())for(const track of stream.getVideoTracks())item.peer.addTrack(track,stream);
+  stream.getVideoTracks()[0].onended=()=>stopMeetingScreen();meetingStatus('You are presenting. Use Stop sharing when finished.');
+ }catch(e){stream?.getTracks().forEach(t=>t.stop());if(e.name!=='NotAllowedError'&&e.name!=='AbortError')toast(e.message);}
+ finally{meetingScreenBusy=false;renderMeetingScreen();}
+}
+
 document.querySelector('#group-call-button').onclick=openMeeting;
 document.querySelector('#meeting-close').onclick=()=>closeMeeting();
 document.querySelector('#meeting-start-reign').onclick=startMeetingReign;
@@ -161,5 +204,9 @@ document.querySelector('#meeting-save-clip').onclick=saveMeetingClip;
 document.querySelector('#meeting-discard-clip').onclick=()=>{meetingClip=null;document.querySelector('#meeting-clip-draft').hidden=true;};
 document.querySelector('#meeting-confirm-invite').onclick=()=>{document.querySelector('#meeting-invite-request').hidden=true;invitePeople();};
 document.querySelector('#meeting-dismiss-invite').onclick=()=>{document.querySelector('#meeting-invite-request').hidden=true;};
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&meeting)closeMeeting(true);});
+// Screen/tab switching keeps group calls connected; explicit Leave or page exit cleans up.
 window.addEventListener('pagehide',()=>{if(meeting)closeMeeting(true);});
+
+document.querySelector('#meeting-share-screen').onclick=toggleMeetingScreen;
+document.querySelector('#meeting-invite-people').onclick=invitePeople;
+document.querySelector('#meeting-present-mode').onclick=()=>{const node=document.querySelector('.meeting-shared-work');if(document.fullscreenElement)document.exitFullscreen?.();else node.requestFullscreen?.().catch(()=>toast('Full screen is unavailable here.'));};
