@@ -128,6 +128,7 @@ function renderWork() {
   }
 }
 function modal(title, body, action, saveLabel = 'Save changes') {
+  $('#modal-kicker').textContent=me?.role==='admin'?'WORKSPACE ADMIN':'WORKMATES';
   $('#modal-body').onclick = null; $('#modal-body').onchange = null;
   $('#modal-title').textContent = title; $('#modal-body').innerHTML = body; $('#modal-error').textContent = '';
   $('#save-modal').textContent = saveLabel; $('#save-modal').hidden = !action; $('#cancel-modal').textContent = action ? 'Cancel' : 'Close';
