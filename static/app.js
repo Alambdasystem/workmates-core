@@ -20,7 +20,7 @@ async function api(path, method = 'GET', body) {
   const response = await fetch('/api' + path, {method, headers: {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}, body:body === undefined ? undefined : JSON.stringify(body)});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); clearVoiceNote(); endLive();soloActive=false;$('#solo-view').hidden=true;clearInterval(socialPoll); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
+    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); clearVoiceNote(); closeMeeting(true);endLive();soloActive=false;$('#solo-view').hidden=true;clearInterval(socialPoll); me = null; $('#workspace').hidden = true; $('#login').hidden = false; $('#dashboard').hidden=true; }
     throw new Error(value.error || 'Request failed.');
   }
   return value;
@@ -41,7 +41,7 @@ async function boot() {
   $('#workspace-model').textContent = me.model || 'OpenAI';
   $('#role-label').textContent = me.role === 'admin' ? 'Workspace administrator' : 'Team member';
   $('#empty-description').textContent = 'Create a room, invite your people, or open a room someone shared with you.';
-  adminVisibility(); await loadRooms();
+  adminVisibility(); await loadRooms(); $('#workspace').hidden=true; $('#dashboard').hidden=false;renderDashboard();
   const destination = new URLSearchParams(location.hash.slice(1));
   if (destination.has('canvas') && destination.has('room') && rooms.some(r=>r.id===destination.get('room'))) {
     await selectRoom(destination.get('room')); await openCanvas(destination.get('canvas')); history.replaceState(null,'','/');
@@ -51,18 +51,19 @@ async function boot() {
 }
 async function loadRooms() {
   rooms = await api('/rooms'); renderRooms();
-  if (!selected && rooms.length) await selectRoom(rooms[0].id);
+  if(me && !$('#dashboard').hidden)renderDashboard();
 }
 function renderRooms() {
   $('#room-list').innerHTML = rooms.map(r => `<button data-room="${esc(r.id)}" class="${selected === r.id ? 'active' : ''}"><span class="room-icon">#</span>${esc(r.name)}${r.enabled ? '<span class="dot"></span>' : ''}</button>`).join('') + '<button id="create-in-nav">＋ New group</button>';
   $('#create-in-nav')?.addEventListener('click', createGroup);
 }
 async function selectRoom(id) {
+  if(meeting&&selected!==id){if(await closeMeeting()===false)return;}
   if (canvasDirty() && !confirm('Leave your unsaved document edits?')) return;
   closeGenerationPreview(); clearAssetSelection(); closeCanvas(true); cancelVoice(); clearVoiceNote();
   if (soloActive && selected!==id) {endLive();soloActive=false;$('#solo-view').hidden=true;}
   closeMobileNavigation();
-  selected = id; lastMessages = ''; room = null;
+  hideDashboard();selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
   renderRooms(); await refresh(true);
 }
@@ -85,6 +86,7 @@ function renderRoom() {
   $('#mobile-room-title').textContent = room.name;
   $('#room-name').textContent = room.name; $('#room-description').textContent = room.description;
   $('#invite-button').hidden=!!room.private;
+  $('#group-call-button').hidden=!!room.private;
   $('#solo-button').textContent='☎ Call '+room.agent_name;
   $('#member-count').textContent = `${room.members.length} ${room.members.length === 1 ? 'person' : 'people'}`;
   $('#agent-name').textContent = room.agent_name;
@@ -165,7 +167,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => $('#modal').close
 $('#new-group').onclick = $('#first-group').onclick = createGroup;
 $('#configure-button').onclick = configure; $('#invite-button').onclick = invitePeople;
 $('#room-list').addEventListener('click', event => { const b = event.target.closest('[data-room]'); if (b) selectRoom(b.dataset.room); });
-$('#logout').onclick = async () => { closeGenerationPreview(); clearAssetSelection(); cancelVoice(); clearVoiceNote(); endLive(); clearInterval(socialPoll); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
+$('#logout').onclick = async () => { closeGenerationPreview(); clearAssetSelection(); cancelVoice(); clearVoiceNote();await closeMeeting(true);endLive(); clearInterval(socialPoll); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
 $('#password-button').onclick = () => modal('Change your password.', '<label>Current password<input name="current" type="password" autocomplete="current-password" required></label><label>New password<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="256" required></label><p class="hint">Use at least 14 characters. Other sessions will be signed out.</p>', async f => { await api('/password','POST',{current:f.get('current'),password:f.get('password')}); me = await api('/me'); toast('Password updated.'); });
 let settingsSaving = false;
 async function updateSettings(changes) {

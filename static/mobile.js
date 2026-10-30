@@ -72,3 +72,22 @@ window.visualViewport?.addEventListener('resize',updateChatViewport);
 window.visualViewport?.addEventListener('scroll',updateChatViewport);
 new ResizeObserver(updateChatViewport).observe(document.querySelector('.composer'));
 syncMobileLayout();
+
+function swipeNavigationIntent(start,end,isOpen) {
+  const dx=end.x-start.x,dy=end.y-start.y;
+  if(Math.abs(dx)<64||Math.abs(dx)<Math.abs(dy)*1.5)return null;
+  if(isOpen&&dx<0)return 'close';
+  if(!isOpen&&start.x<=32&&dx>0)return 'open';
+  return null;
+}
+let navigationTouch=null;
+document.addEventListener('touchstart',event=>{
+  if(!mobileLayout.matches||event.touches.length!==1||document.querySelector('#workspace').hidden||event.target.closest('input,textarea,select,audio,video,dialog,.canvas,.solo-view,.meeting-view')){navigationTouch=null;return;}
+  const touch=event.touches[0];navigationTouch={x:touch.clientX,y:touch.clientY};
+},{passive:true});
+document.addEventListener('touchend',event=>{
+  if(!navigationTouch||event.changedTouches.length!==1)return;
+  const touch=event.changedTouches[0],intent=swipeNavigationIntent(navigationTouch,{x:touch.clientX,y:touch.clientY},navigation.classList.contains('navigation-open'));navigationTouch=null;
+  if(intent==='open')openMobileNavigation();else if(intent==='close')closeMobileNavigation();
+},{passive:true});
+document.addEventListener('touchcancel',()=>{navigationTouch=null;},{passive:true});

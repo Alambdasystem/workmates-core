@@ -1,7 +1,7 @@
 'use strict';
 let soloReturnRoom=null,soloActive=false,livePeer=null,liveChannel=null,liveStream=null,liveStarting=false,liveEpoch=0,liveMuted=false,liveTimer=null,soloSignature='',liveCaption='',liveTurns=new Set();
 function liveState(text){document.querySelector('#solo-status').textContent=text;}
-let liveConnectTimer=null;
+let liveConnectTimer=null,liveAudioMonitor=null,liveOrbMeter=null;
 function callStage(stage){document.querySelector('#solo-view').dataset.callStage=stage;document.querySelector('#call-stage-label').textContent=({ringing:'Ringing',connecting:'Connecting',connected:'Connected',failed:'Call failed',ended:'Call ended',microphone:'Allow microphone access'})[stage]||stage;}
 let soloOpening=false,ringContext=null,ringTimer=null,ringTones=[];
 function stopRingtone(){clearInterval(ringTimer);ringTimer=null;ringTones.forEach(t=>{try{t.stop();}catch{}});ringTones=[];ringContext?.close().catch(()=>{});ringContext=null;document.querySelector('#reign-eye').classList.remove('ringing');}
@@ -37,12 +37,13 @@ async function saveLiveTurn(role,text,eventId,rid){
  try{await api(`/rooms/${rid}/live/transcript`,'POST',{role,text:text.slice(0,8000),event_id:eventId.slice(0,100)});if(selected===rid)await refresh();}catch{liveTurns.delete(eventId);liveState('This transcript could not be saved. Copy it before leaving.');}
 }
 function endLive(message='Voice ended. Your saved conversation is still here.',failed=false){
+ liveAudioMonitor?.();liveOrbMeter?.();liveAudioMonitor=null;liveOrbMeter=null;
  callStage(failed?'failed':'ended');stopRingtone();liveEpoch++;clearTimeout(liveConnectTimer);liveConnectTimer=null;clearTimeout(liveTimer);liveTimer=null;
  liveStream?.getTracks().forEach(track=>track.stop());liveStream=null;
  if(liveChannel){liveChannel.onmessage=null;liveChannel.onclose=null;liveChannel.close();}liveChannel=null;
  if(livePeer){livePeer.onconnectionstatechange=null;livePeer.close();}livePeer=null;
  const audio=document.querySelector('#solo-audio');audio.pause();audio.srcObject=null;
- document.querySelector('#call-audio-state').textContent='';liveStarting=false;liveMuted=false;document.querySelector('#live-start').textContent='☎ Call again';document.querySelector('#live-mute').hidden=true;document.querySelector('#live-mute').textContent='Mute microphone';document.querySelector('#live-mute').setAttribute('aria-pressed','false');document.querySelector('#live-speaker').hidden=true;document.querySelector('#reign-eye').classList.remove('listening','speaking');liveState(message);
+ document.querySelector('#call-audio-state').textContent='';liveStarting=false;liveMuted=false;document.querySelector('#live-start').textContent='☎ Call again';document.querySelector('#live-mute').hidden=true;document.querySelector('#live-mute').textContent='Mute microphone';document.querySelector('#live-mute').setAttribute('aria-pressed','false');document.querySelector('#live-speaker').hidden=true;document.querySelector('#reign-eye').classList.remove('listening','speaking','thinking');liveState(message);
 }
 async function startLive(){
  if(livePeer||liveStarting){endLive();return;}
@@ -50,9 +51,9 @@ async function startLive(){
  clearVoiceNote();cancelVoice();callStage('microphone');clearTimeout(liveConnectTimer);liveConnectTimer=setTimeout(()=>endLive('Connection timed out. Check microphone permissions and try again.',true),45000);liveStarting=true;const epoch=++liveEpoch,rid=selected;liveCaption='';liveState('Connecting live voice…');document.querySelector('#reign-eye').classList.add('ringing');document.querySelector('#live-start').textContent='Cancel connection';
  try{
   const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
-  if(epoch!==liveEpoch||rid!==selected||!soloActive){stream.getTracks().forEach(t=>t.stop());return;}liveStream=stream;
+  if(epoch!==liveEpoch||rid!==selected||!soloActive){stream.getTracks().forEach(t=>t.stop());return;}liveStream=stream;liveOrbMeter=meterCallOrb(stream,document.querySelector('#reign-eye'));
   const peer=new RTCPeerConnection();livePeer=peer;peer.addTrack(stream.getAudioTracks()[0],stream);
-  const audio=document.querySelector('#solo-audio');document.querySelector('#call-audio-state').textContent='Waiting for REIGN audio';audio.onplaying=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Speaker active · REIGN audio is playing';};audio.onwaiting=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Buffering audio…';};peer.ontrack=event=>{audio.srcObject=event.streams[0]||new MediaStream([event.track]);audio.muted=false;audio.volume=1;audio.play().catch(()=>{document.querySelector('#call-audio-state').textContent='Speaker blocked · tap Enable speaker';document.querySelector('#live-speaker').hidden=false;liveState('Connected, but sound is blocked. Tap Enable speaker to hear REIGN.');});};
+  const audio=document.querySelector('#solo-audio');document.querySelector('#call-audio-state').textContent='Waiting for REIGN audio';audio.onplaying=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Speaker active · REIGN audio is playing';};audio.onwaiting=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Buffering audio…';};peer.ontrack=event=>{audio.srcObject=event.streams[0]||new MediaStream([event.track]);audio.muted=false;audio.volume=1;liveAudioMonitor?.();liveAudioMonitor=monitorCallAudio(peer,audio,document.querySelector('#call-audio-state'));liveOrbMeter?.();liveOrbMeter=meterCallOrb(audio.srcObject,document.querySelector('#reign-eye'));audio.play().catch(()=>{document.querySelector('#call-audio-state').textContent='Speaker blocked · tap Enable speaker';document.querySelector('#live-speaker').hidden=false;liveState('Connected, but sound is blocked. Tap Enable speaker to hear REIGN.');});};
   peer.onconnectionstatechange=()=>{if(['failed','closed','disconnected'].includes(peer.connectionState)&&epoch===liveEpoch)endLive('Voice connection ended. Start again when ready.');};
   const channel=peer.createDataChannel('oai-events');liveChannel=channel;
   channel.onopen=()=>{if(epoch!==liveEpoch)return;clearTimeout(liveConnectTimer);liveConnectTimer=null;stopRingtone();callStage('connected');liveStarting=false;liveState('Connected · REIGN will greet you. Speak naturally or type below.');document.querySelector('#live-start').textContent='End voice';document.querySelector('#live-mute').hidden=false;document.querySelector('#reign-eye').classList.add('listening');liveTimer=setTimeout(()=>endLive('Voice ended after 15 minutes. Start again to continue.'),15*60*1000);};
@@ -61,12 +62,13 @@ async function startLive(){
   channel.onmessage=event=>{
    if(epoch!==liveEpoch)return;let value;try{value=JSON.parse(event.data);}catch{return;}
    if(value.type==='session.created'&&!greeted){greeted=true;sendLiveEvent({type:'response.create',response:{output_modalities:['audio'],instructions:'Greet the user briefly as REIGN, say you are connected, and ask how you can help. Speak aloud.'}});}
-   if(value.type==='input_audio_buffer.speech_started'){document.querySelector('#reign-eye').classList.remove('speaking');liveState(liveMuted?'Microphone muted':'Listening…');}
-   if(value.type==='response.created'){liveCaption='';document.querySelector('#solo-caption').textContent='';}
-   if(value.type==='response.output_audio_transcript.delta'||value.type==='response.output_text.delta'){liveCaption+=value.delta||'';document.querySelector('#solo-caption').textContent=liveCaption;document.querySelector('#reign-eye').classList.add('speaking');liveState(room.agent_name+' is speaking…');}
+   if(value.type==='input_audio_buffer.speech_started'){document.querySelector('#reign-eye').classList.remove('speaking','thinking');liveState(liveMuted?'Microphone muted':'Listening…');}
+   if(value.type==='input_audio_buffer.speech_stopped')document.querySelector('#reign-eye').classList.add('thinking');
+   if(value.type==='response.created'){document.querySelector('#reign-eye').classList.add('thinking');liveCaption='';document.querySelector('#solo-caption').textContent='';}
+   if(value.type==='response.output_audio_transcript.delta'||value.type==='response.output_text.delta'){liveCaption+=value.delta||'';document.querySelector('#solo-caption').textContent=liveCaption;document.querySelector('#reign-eye').classList.remove('thinking');document.querySelector('#reign-eye').classList.add('speaking');liveState(room.agent_name+' is speaking…');}
    if(value.type==='response.output_audio_transcript.done'||value.type==='response.output_text.done'){saveLiveTurn('assistant',value.transcript||value.text||liveCaption,'assistant-'+(value.item_id||value.response_id||crypto.randomUUID()),rid);}
    if(value.type==='conversation.item.input_audio_transcription.completed'){saveLiveTurn('user',value.transcript,'user-'+value.item_id,rid);}
-   if(value.type==='response.done'){document.querySelector('#reign-eye').classList.remove('speaking');liveState(liveMuted?'Microphone muted · you can type below.':'Listening · speak naturally.');}
+   if(value.type==='response.done'){document.querySelector('#reign-eye').classList.remove('speaking','thinking');liveState(liveMuted?'Microphone muted · you can type below.':'Listening · speak naturally.');}
    if(value.type==='error'){endLive(value.error?.message||'The voice service reported an error. Please try again.',true);}
   };
   callStage('connecting');
