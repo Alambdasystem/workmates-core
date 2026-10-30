@@ -27,7 +27,7 @@ def create_app(config=None, opener=None):
         response.headers['X-Content-Type-Options']='nosniff'
         response.headers['X-Frame-Options']='DENY'
         response.headers['Referrer-Policy']='no-referrer'
-        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        response.headers.setdefault('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if request.path.startswith('/api/'):
             response.headers['Cache-Control']='no-store'
         return response
@@ -41,7 +41,7 @@ def create_app(config=None, opener=None):
     @app.get('/healthz')
     def health(): return jsonify(status='ok')
 
-    @app.route('/api/<path:path>',methods=['GET','POST','PATCH','DELETE'])
+    @app.route('/api/<path:path>',methods=['GET','POST','PUT','PATCH','DELETE'])
     def proxy(path):
         callback = path == 'integrations/google/callback' and request.method == 'GET'
         if '..' in path.split('/') or '\\' in path or '//' in path or (request.query_string and not callback):
@@ -52,13 +52,14 @@ def create_app(config=None, opener=None):
                 abort(403,'Cross-origin request rejected.')
             if request.headers.get('Sec-Fetch-Site')=='cross-site':
                 abort(403,'Cross-site request rejected.')
-            voice = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/transcribe') and len(path.split('/')) == 3
+            voice = request.method == 'POST' and path.startswith('rooms/') and (path.endswith('/transcribe') or path.endswith('/voice')) and len(path.split('/')) == 3
             upload = request.method == 'POST' and path.startswith('rooms/') and path.endswith('/documents/import') and len(path.split('/')) == 4
-            if not request.is_json and not (voice and request.mimetype.startswith('audio/')) and not (upload and request.mimetype == 'application/octet-stream'):
+            background = request.method == 'PUT' and path == 'preferences/background/image' and request.mimetype in ('image/png','image/jpeg','image/webp')
+            if not request.is_json and not background and not (voice and request.mimetype.startswith('audio/')) and not (upload and request.mimetype == 'application/octet-stream'):
                 abort(415,'Send application/json.')
         # Validate the browser origin above, then make a server-to-server call.
         # Do not forward the frontend Host/Origin to Render's backend router.
-        forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token','X-File-Name') if name in request.headers}
+        forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token','X-File-Name','X-Request-ID','X-Audio-Duration','Range') if name in request.headers}
         target = base+'/api/'+urllib.parse.quote(path,safe='/')
         if callback:
             target += '?' + request.query_string.decode('ascii')
@@ -82,6 +83,8 @@ def create_app(config=None, opener=None):
             result=Response(body,status=status,content_type=upstream.headers.get('Content-Type','application/json'))
             if upstream.headers.get('Content-Disposition'):
                 result.headers['Content-Disposition'] = upstream.headers['Content-Disposition']
+            for header in ('Content-Range','Accept-Ranges'):
+                if upstream.headers.get(header):result.headers[header]=upstream.headers[header]
             if path.endswith('/preview') and upstream.headers.get('Content-Security-Policy'):
                 result.headers['Content-Security-Policy'] = upstream.headers['Content-Security-Policy']
             for cookie in upstream.headers.get_all('Set-Cookie',[]):
