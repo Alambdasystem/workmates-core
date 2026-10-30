@@ -87,7 +87,7 @@ function renderRoom() {
   $('#mobile-room-title').textContent = room.name;
   $('#room-name').textContent = room.name; $('#room-description').textContent = room.description;
   $('#invite-button').hidden=!!room.private;
-  $('#group-call-button').hidden=!!room.private;
+  $('#group-call-button').hidden=!!room.private;$('#chat-call-entry').hidden=!!room.private;$('#chat-call-label').textContent='Call with '+room.agent_name;$('#chat-call-members').textContent=chatCallSummary(room.members,room.agent_name);
   $('#solo-button').textContent='☎ Call '+room.agent_name;
   $('#member-count').textContent = `${room.members.length} ${room.members.length === 1 ? 'person' : 'people'}`;
   $('#agent-name').textContent = room.agent_name;
@@ -236,7 +236,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 let voiceRecorder = null, voiceStream = null, voiceTimer = null, voiceGeneration = 0, transcribing = false, voiceStarting = false;
 function stopTracks() { voiceStream?.getTracks().forEach(t => t.stop()); voiceStream = null; clearTimeout(voiceTimer); }
 function voiceUI(recording, status = '') {
-  $('#voice-button').textContent = recording ? '■ Stop' : '🎙 Talk';
+  $('#voice-button').textContent = recording ? '■ Stop' : '🎙 Dictate';
   $('#voice-button').setAttribute('aria-pressed',String(recording));
   $('#voice-button').setAttribute('aria-label',recording ? 'Stop voice dictation' : 'Start voice dictation');
   $('#voice-status').textContent = status;

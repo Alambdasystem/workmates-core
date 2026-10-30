@@ -188,7 +188,13 @@ async function toggleMeetingScreen(){
  finally{meetingScreenBusy=false;renderMeetingScreen();}
 }
 
+function chatCallSummary(members,name){return members.slice(0,3).map(m=>m.name.split(/\s+/)[0]).join(' + ')+(members.length>3?' + '+(members.length-3)+' more':'')+' + '+name;}
+async function startChatCall(){
+ const button=document.querySelector('#chat-call-button');if(button.disabled)return;button.disabled=true;
+ try{await openMeeting();if(meeting&&meetingIsHost()&&!meetingAgentPeer)await startMeetingReign();}catch(e){toast(e.message);}finally{button.disabled=false;}
+}
 document.querySelector('#group-call-button').onclick=openMeeting;
+document.querySelector('#chat-call-button').onclick=startChatCall;
 document.querySelector('#meeting-close').onclick=()=>closeMeeting();
 document.querySelector('#meeting-start-reign').onclick=startMeetingReign;
 document.querySelector('#meeting-mute').onclick=()=>{meetingMuted=!meetingMuted;meetingStream?.getAudioTracks().forEach(t=>t.enabled=!meetingMuted);document.querySelector('#meeting-mute').textContent=meetingMuted?'Unmute':'Mute';document.querySelector('#meeting-mute').setAttribute('aria-pressed',String(meetingMuted));};
