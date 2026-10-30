@@ -1,0 +1,25 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const elements=new Map(),listeners={},toasts=[];
+function $(id){if(!elements.has(id))elements.set(id,{hidden:true,value:'',innerHTML:'',focus(){}});return elements.get(id);}
+const app=fs.readFileSync('static/app.js','utf8');
+const context={$,selected:'chat',room:{id:'chat',agent_name:'REIGN',files:Array.from({length:11},(_,i)=>({id:'image-'+i,filename:'Scene '+i+'.png',mime:'image/png',meta:{prompt:'Scene '+i}})),drive_copies:[],drive_mounts:[]},me:{role:'admin'},document:{addEventListener(name,fn){listeners[name]=fn;}},toast:t=>toasts.push(t),modal(){},console};
+vm.createContext(context);vm.runInContext(app.slice(app.indexOf('const esc ='),app.indexOf('\nlet me,')),context);vm.runInContext(fs.readFileSync('static/assets.js','utf8'),context);
+listeners.DOMContentLoaded();
+for(let i=0;i<11;i++)context.useAsset('image-'+i);
+assert.equal(vm.runInContext('selectedAssetIds.length',context),10);assert(toasts.some(t=>t.includes('up to ten')));
+assert($('#selected-assets').innerHTML.includes('10/10 images'));assert($('#message-input').value.startsWith('REIGN'));
+listeners.click({target:{closest(selector){return selector==='[data-move-asset]'?{dataset:{moveAsset:'image-1',direction:'-1'}}:null;}}});
+assert.equal(vm.runInContext('selectedAssetIds[0]',context),'image-1');
+listeners.click({target:{closest(selector){return selector==='[data-compose-assets]'?{dataset:{composeAssets:'video'}}:null;}}});
+assert($('#message-input').value.includes('MP4 slideshow'));assert($('#message-input').value.includes('selected images in this order'));
+listeners.click({target:{closest(selector){return selector==='[data-remove-asset]'?{dataset:{removeAsset:'image-1'}}:null;}}});
+assert.equal(vm.runInContext('selectedAssetIds.length',context),9);
+assert(context.assetActionBar(context.room.files[0]).includes('Saved in this chat'));
+assert(context.assetActionBar(context.room.files[0]).includes('Upload to Drive'));
+context.room.drive_copies=[{artifact_id:'image-0'}];assert(context.assetActionBar(context.room.files[0]).includes('Drive copy saved'));
+const doc=context.renderCompositionPreview({kind:'image_document',title:'Book',meta:{introduction:'<script>bad</script>',images:[{file_id:'image-0',caption:'A scene'}]}});
+assert(doc.includes('/files/image-0/preview'));assert(!doc.includes('<script>'));
+const slides=context.renderCompositionPreview({kind:'presentation',meta:{slides:[{title:'Launch',body:'A plan',image_id:'image-0',layout:'background'}]}});
+assert(slides.includes('background-slide'));assert(slides.includes('Launch'));
+context.clearAssetSelection();assert.equal(vm.runInContext('selectedAssetIds.length',context),0);assert($('#selected-assets').hidden);
+console.log('Asset UI passed: ten-image cap, selection order, removal, composition drafts, saved/Drive labels, image documents, PowerPoint backgrounds and clearing.');

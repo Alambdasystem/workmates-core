@@ -6,6 +6,7 @@ function element(id){if(!elements.has(id))elements.set(id,{hidden:false,innerHTM
 const context={console,document:{addEventListener(){},querySelectorAll(){return[];}},$:element,selected:'room',me:{role:'admin'},toast(){},api:async()=>({kind:'text',body:'safe text'})};
 vm.createContext(context);
 vm.runInContext(app.slice(app.indexOf('const esc ='),app.indexOf('\nlet me,'))+'\n'+app.slice(app.indexOf('function markdown(source)'),app.indexOf('\nlet canvasDoc')),context);
+vm.runInContext(fs.readFileSync('static/assets.js','utf8'),context);
 vm.runInContext(fs.readFileSync('static/generation.js','utf8'),context);
 context.room={id:'room',agent_name:'REIGN',mode:'mention',enabled:true,messages:[{id:1,kind:'human',content:'REIGN make a Word document'}],documents:[],files:[],jobs:[{id:'job',message_id:1,status:'running'}],generated_documents:[]};
 async function run(){
