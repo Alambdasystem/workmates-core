@@ -20,7 +20,7 @@ async function api(path, method = 'GET', body) {
   const response = await fetch('/api' + path, {method, headers: {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}, body:body === undefined ? undefined : JSON.stringify(body)});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); clearVoiceNote(); closeMeeting(true);endLive();soloActive=false;$('#solo-view').hidden=true;clearInterval(socialPoll); me = null; $('#workspace').hidden = true; $('#login').hidden = false; $('#dashboard').hidden=true; }
+    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); clearVoiceNote(); closeMeeting(true);endLive();soloActive=false;$('#solo-view').hidden=true;clearInterval(socialPoll); me = null; $('#join-alert').hidden=true; $('#workspace').hidden = true; $('#login').hidden = false; $('#dashboard').hidden=true; }
     throw new Error(value.error || 'Request failed.');
   }
   return value;
@@ -46,6 +46,7 @@ async function boot() {
   if (destination.has('canvas') && destination.has('room') && rooms.some(r=>r.id===destination.get('room'))) {
     await selectRoom(destination.get('room')); await openCanvas(destination.get('canvas')); history.replaceState(null,'','/');
   }
+  if(destination.has('room')&&!destination.has('canvas')&&rooms.some(r=>r.id===destination.get('room'))){await selectRoom(destination.get('room'));history.replaceState(null,'','/');}
   await initSocial();
   if(inviteToken&&!invitationHandled){invitationHandled=true;modal('Join the shared room?', '<p>This invitation adds your existing account to the shared conversation.</p>',async()=>{const result=await api('/invites/accept','POST',{token:inviteToken});await loadRooms();await selectRoom(result.room_id);},'Join room');}
 }

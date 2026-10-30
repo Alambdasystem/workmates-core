@@ -50,7 +50,7 @@ async function sendVoiceNote(){
 }
 async function refreshNotifications(prompt=false){
  if(!me)return;
- try{socialNotifications=await api('/notifications');const count=socialNotifications.filter(n=>!n.seen).length;document.querySelector('#notification-count').textContent=count||'';document.querySelector('#notification-button').setAttribute('aria-label',`Notifications${count?', '+count+' unread':''}`);if(prompt&&count)showNotifications();}catch(e){if(me&&prompt)toast('Notifications are temporarily unavailable.');}
+ try{socialNotifications=await api('/notifications');if(typeof processJoinAlerts==='function')processJoinAlerts(socialNotifications);const count=socialNotifications.filter(n=>!n.seen).length;document.querySelector('#notification-count').textContent=count||'';document.querySelector('#notification-button').setAttribute('aria-label',`Notifications${count?', '+count+' unread':''}`);if(prompt&&count)showNotifications();}catch(e){if(me&&prompt)toast('Notifications are temporarily unavailable.');}
 }
 function showNotifications(){
  modal('Your notifications',socialNotifications.length?socialNotifications.map(n=>`<div class="notification-item"><strong>${esc(n.title)}</strong><small>${esc(date(n.created))}${n.seen?'':' · New'}</small>${n.can_accept?`<button type="button" class="primary" data-accept-notification="${esc(n.id)}">Join group</button>`:`<button type="button" class="secondary" data-open-notification="${esc(n.id)}">Open group</button>`}<button type="button" class="text-button" data-read-notification="${esc(n.id)}">Mark read</button></div>`).join(''):'<p>No notifications yet. Group invitations appear here.</p>',null);
@@ -96,7 +96,7 @@ function agentDrive(filter='all'){
  adminVisibility();document.querySelector('#modal-body').onclick=async event=>{try{const filterButton=event.target.closest('[data-drive-filter]'),file=event.target.closest('[data-drive-preview]'),doc=event.target.closest('[data-open-canvas]'),mount=event.target.closest('[data-agent-mount]');if(filterButton){agentDrive(filterButton.dataset.driveFilter);return;}if(event.target.closest('#agent-add-drive')){document.querySelector('#modal').close();await manageDrive();return;}if(file||doc||mount){document.querySelector('#modal').close();if(file)await openGenerationPreview('file',file.dataset.drivePreview);else if(doc)await openCanvas(doc.dataset.openCanvas);else await browseDrive(mount.dataset.agentMount);}}catch(e){toast(e.message);}};
 }
 async function initSocial(){
- clearInterval(socialPoll);await applyBackground();await refreshNotifications(true);socialPoll=setInterval(()=>refreshNotifications(),15000);
+ clearInterval(socialPoll);await applyBackground();await refreshNotifications(true);socialPoll=setInterval(()=>refreshNotifications(),5000);
 }
 document.querySelector('#record-note-button').onclick=recordVoiceNote;
 document.querySelector('#send-voice-note').onclick=sendVoiceNote;
