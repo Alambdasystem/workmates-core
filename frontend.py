@@ -3,7 +3,7 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
-from flask import Flask, request, jsonify, send_from_directory, Response, abort
+from flask import redirect, Flask, request, jsonify, send_from_directory, Response, abort
 from werkzeug.exceptions import HTTPException
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -36,7 +36,16 @@ def create_app(config=None, opener=None):
     def error(exc): return jsonify(error=exc.description),exc.code
 
     @app.get('/')
-    def index(): return send_from_directory(app.static_folder,'index.html')
+    def index(): return send_from_directory(app.static_folder,'index.html' if request.cookies.get('wm_session') else 'landing.html')
+
+    @app.get('/app')
+    def member_app(): return send_from_directory(app.static_folder,'index.html')
+
+    @app.get('/waiting-list')
+    def public_waiting_list(): return send_from_directory(app.static_folder,'landing.html')
+
+    @app.get('/signup')
+    def public_signup(): return redirect('/app#signup')
 
     @app.get('/sw.js')
     def notification_worker():
