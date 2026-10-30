@@ -38,13 +38,21 @@ def create_app(config=None, opener=None):
     @app.get('/')
     def index(): return send_from_directory(app.static_folder,'index.html')
 
+    @app.get('/sw.js')
+    def notification_worker():
+        response=send_from_directory(app.static_folder,'sw.js')
+        response.headers['Cache-Control']='no-cache'
+        return response
+
     @app.get('/healthz')
     def health(): return jsonify(status='ok')
 
     @app.route('/api/<path:path>',methods=['GET','POST','PUT','PATCH','DELETE'])
     def proxy(path):
         callback = path == 'integrations/google/callback' and request.method == 'GET'
-        if '..' in path.split('/') or '\\' in path or '//' in path or (request.query_string and not callback):
+        query_keys={'q'} if path=='call-files' else {'kind','asset_id'} if path.startswith('rooms/') and len(path.split('/'))==3 and path.endswith('/call-item') else set()
+        file_query=request.method=='GET' and bool(query_keys) and set(request.args).issubset(query_keys) and all(len(request.args.getlist(k))==1 and len(request.args[k])<=200 for k in request.args)
+        if '..' in path.split('/') or '\\' in path or '//' in path or (request.query_string and not callback and not file_query):
             abort(400,'Invalid API path.')
         if request.method!='GET':
             origin=request.headers.get('Origin')
@@ -62,7 +70,7 @@ def create_app(config=None, opener=None):
         # Do not forward the frontend Host/Origin to Render's backend router.
         forwarded={name:request.headers[name] for name in ('Cookie','Content-Type','X-CSRF-Token','X-File-Name','X-Request-ID','X-Audio-Duration','Range') if name in request.headers}
         target = base+'/api/'+urllib.parse.quote(path,safe='/')
-        if callback:
+        if callback or (file_query and request.query_string):
             target += '?' + request.query_string.decode('ascii')
         req=urllib.request.Request(target,method=request.method,headers=forwarded,data=request.get_data() if request.method!='GET' else None)
         try:
