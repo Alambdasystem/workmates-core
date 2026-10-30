@@ -18,7 +18,7 @@ class FrontendTests(unittest.TestCase):
         self.http=FakeHTTP();self.app=create_app({'WORKMATES_API_URL':'https://api.example.test'},self.http);self.c=self.app.test_client()
     def test_ui_served(self):
         with self.c.get('/') as r:
-            self.assertEqual(r.status_code,200);self.assertIn(b'workmates',r.data)
+            self.assertEqual(r.status_code,200);self.assertIn(b'workmates',r.data.lower())
         self.assertEqual(self.c.get('/static/app.js').status_code,200)
     def test_proxy_forwards_session_and_csrf_and_sets_cookie(self):
         self.c.set_cookie('wm_session','session')
@@ -116,3 +116,7 @@ class FrontendTests(unittest.TestCase):
         response=self.c.get('/sw.js');self.assertEqual(response.status_code,200)
         self.assertIn(b'notificationclick',response.data)
         self.assertIn('no-cache',response.headers['Cache-Control'])
+    def test_public_waitlist_and_member_app_are_separate(self):
+        home=self.c.get('/');self.assertIn(b'Join the waiting list',home.data)
+        self.assertIn(b'login-form',self.c.get('/app').data)
+        self.assertEqual(self.c.get('/signup').status_code,302)
