@@ -1,5 +1,5 @@
 'use strict';
-function shouldShowJoinAlert(n,shown,now){return !n.seen&&['member_joined','call_joined','reminder'].includes(n.kind)&&!shown.has(n.id)&&now-n.created<600&&now>=n.created-10;}
+function shouldShowJoinAlert(n,shown,now){return !n.seen&&['member_joined','call_joined','reminder','action_item'].includes(n.kind)&&!shown.has(n.id)&&now-n.created<600&&now>=n.created-10;}
 // UI bindings
 let joinAlertCurrent=null,joinAlertAudio=null,joinAlertShown=new Set(),joinAlertOwner=null,joinAlertTimer=null;
 function alertPreference(){try{return JSON.parse(localStorage.getItem('workmates-alerts-'+me.id)||'{}');}catch{return{};}}

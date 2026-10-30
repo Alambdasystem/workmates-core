@@ -2,7 +2,7 @@
 let soloReturnRoom=null,soloActive=false,livePeer=null,liveChannel=null,liveStream=null,liveStarting=false,liveEpoch=0,liveMuted=false,liveTimer=null,soloSignature='',liveCaption='',liveTurns=new Set();
 function liveState(text){document.querySelector('#solo-status').textContent=text;}
 let liveConnectTimer=null,liveAudioMonitor=null,liveOrbMeter=null;
-function callStage(stage){document.querySelector('#solo-view').dataset.callStage=stage;document.querySelector('#call-stage-label').textContent=({ringing:'Ringing',connecting:'Connecting',connected:'Connected',failed:'Call failed',ended:'Call ended',microphone:'Allow microphone access'})[stage]||stage;}
+function callStage(stage){if(['connecting','connected','failed','ended'].includes(stage))reportCallState('solo_call',stage,typeof selected==='string'?selected:null);document.querySelector('#solo-view').dataset.callStage=stage;document.querySelector('#call-stage-label').textContent=({ringing:'Ringing',connecting:'Connecting',connected:'Connected',failed:'Call failed',ended:'Call ended',microphone:'Allow microphone access'})[stage]||stage;}
 let soloOpening=false,ringContext=null,ringTimer=null,ringTones=[];
 function stopRingtone(){clearInterval(ringTimer);ringTimer=null;ringTones.forEach(t=>{try{t.stop();}catch{}});ringTones=[];ringContext?.close().catch(()=>{});ringContext=null;document.querySelector('#reign-eye').classList.remove('ringing');}
 function startRingtone(){
@@ -51,7 +51,7 @@ async function startLive(){
  if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection){liveState('Live voice needs a browser with microphone and WebRTC support. You can still type below.');return;}
  clearVoiceNote();cancelVoice();callStage('microphone');clearTimeout(liveConnectTimer);liveConnectTimer=setTimeout(()=>endLive('Connection timed out. Check microphone permissions and try again.',true),45000);liveStarting=true;const epoch=++liveEpoch,rid=selected;liveCaption='';liveState('Connecting live voice…');document.querySelector('#reign-eye').classList.add('ringing');document.querySelector('#live-start').textContent='Cancel connection';
  try{
-  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  const stream=await callMicrophone(()=>navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}));
   if(epoch!==liveEpoch||rid!==selected||!soloActive){stream.getTracks().forEach(t=>t.stop());return;}liveStream=stream;liveOrbMeter=meterCallOrb(stream,document.querySelector('#reign-eye'));
   const peer=new RTCPeerConnection();livePeer=peer;peer.addTrack(stream.getAudioTracks()[0],stream);
   const audio=document.querySelector('#solo-audio');document.querySelector('#call-audio-state').textContent='Waiting for REIGN audio';audio.onplaying=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Speaker active · REIGN audio is playing';};audio.onwaiting=()=>{if(epoch===liveEpoch)document.querySelector('#call-audio-state').textContent='Buffering audio…';};peer.ontrack=event=>{audio.srcObject=event.streams[0]||new MediaStream([event.track]);audio.muted=false;audio.volume=1;liveAudioMonitor?.();liveAudioMonitor=monitorCallAudio(peer,audio,document.querySelector('#call-audio-state'));liveOrbMeter?.();liveOrbMeter=meterCallOrb(audio.srcObject,document.querySelector('#reign-eye'));audio.play().catch(()=>{document.querySelector('#call-audio-state').textContent='Speaker blocked · tap Enable speaker';document.querySelector('#live-speaker').hidden=false;liveState('Connected, but sound is blocked. Tap Enable speaker to hear REIGN.');});};
@@ -74,8 +74,8 @@ async function startLive(){
    if(value.type==='error'){endLive(value.error?.message||'The voice service reported an error. Please try again.',true);}
   };
   callStage('connecting');
-  const offer=await peer.createOffer();await peer.setLocalDescription(offer);
-  const answer=await api(`/rooms/${rid}/live`,'POST',{sdp:offer.sdp});
+  const sdp=await callReadyOffer(peer);
+  const answer=await api(`/rooms/${rid}/live`,'POST',{sdp});
   if(epoch!==liveEpoch||rid!==selected||!soloActive){peer.close();stream.getTracks().forEach(t=>t.stop());return;}
   await peer.setRemoteDescription({type:'answer',sdp:answer.sdp});
  }catch(e){if(epoch===liveEpoch)endLive(e.name==='NotAllowedError'?'Microphone access was denied. You can still type.':e.message||'Could not connect live voice.',true);}
@@ -89,7 +89,7 @@ document.querySelector('#solo-form').onsubmit=async event=>{
  event.preventDefault();const input=document.querySelector('#solo-input'),text=input.value.trim();if(!text)return;const button=document.querySelector('#solo-send');button.disabled=true;
  try{if(liveChannel?.readyState==='open'){sendLiveEvent({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text}]}});sendLiveEvent({type:'response.create'});await saveLiveTurn('user',text,'typed-'+crypto.randomUUID(),selected);}else{await api(`/rooms/${selected}/messages`,'POST',{content:text,request_id:crypto.randomUUID()});await refresh();liveState('Your workmate is responding…');}input.value='';document.querySelector('#solo-messages').scrollTop=document.querySelector('#solo-messages').scrollHeight;}catch(e){liveState(e.message);}finally{button.disabled=false;}
 };
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&(livePeer||liveStarting))endLive('Voice paused while the app is in the background. Start again when ready.');});
+window.addEventListener('pagehide',()=>endLive());
 window.addEventListener('pagehide',()=>endLive());
 
 document.querySelector('#solo-emoji-button').onclick=()=>{const picker=document.querySelector('#solo-emoji-picker');picker.hidden=!picker.hidden;};

@@ -2,7 +2,7 @@
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let me, rooms = [], room, selected, tab = 'work', lastMessages = '', refreshing = false, saveAction;
-const TOOL_LABELS = {drive_save_file:'Copy images & files to Drive',list_saved_files:'Find saved images & files',read_saved_image:'Look at saved images',create_image_document:'Word documents with images',create_presentation:'PowerPoint with image backgrounds',create_slideshow:'MP4 slideshows & transitions',generate_images:'Generate image batches',web_search:'Web research',create_task:'Create tasks',update_task:'Update tasks',search_documents:'Search group documents',save_document:'Create Word / PDF / Canvas',read_document:'Read group documents',update_document:'Edit Canvas documents',branch_document:'Branch documents',code_interpreter:'Code execution & data files',image_generation:'Generate images',drive_list:'Browse connected Drive folders',drive_read:'Read Drive documents',drive_save:'Save Google Docs',drive_branch:'Create Drive subfolders'};
+const TOOL_LABELS = {propose_action_item:'Propose owned actions & due dates',drive_save_file:'Copy images & files to Drive',list_saved_files:'Find saved images & files',read_saved_image:'Look at saved images',create_image_document:'Word documents with images',create_presentation:'PowerPoint with image backgrounds',create_slideshow:'MP4 slideshows & transitions',generate_images:'Generate image batches',web_search:'Web research',create_task:'Create tasks',update_task:'Update tasks',search_documents:'Search group documents',save_document:'Create Word / PDF / Canvas',read_document:'Read group documents',update_document:'Edit Canvas documents',branch_document:'Branch documents',code_interpreter:'Code execution & data files',image_generation:'Generate images',drive_list:'Browse connected Drive folders',drive_read:'Read Drive documents',drive_save:'Save Google Docs',drive_branch:'Create Drive subfolders'};
 const invitation = new URLSearchParams(location.hash.slice(1));
 const inviteToken = invitation.get('invite');
 let signupMode=false,invitationHandled=false;
@@ -128,7 +128,7 @@ function renderWork() {
   }
 }
 function modal(title, body, action, saveLabel = 'Save changes') {
-  $('#modal-body').onclick = null;
+  $('#modal-body').onclick = null; $('#modal-body').onchange = null;
   $('#modal-title').textContent = title; $('#modal-body').innerHTML = body; $('#modal-error').textContent = '';
   $('#save-modal').textContent = saveLabel; $('#save-modal').hidden = !action; $('#cancel-modal').textContent = action ? 'Cancel' : 'Close';
   saveAction = action;

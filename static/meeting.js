@@ -12,9 +12,9 @@ async function meetingRequest(suffix,body={},method='POST'){return api(meetingPa
 async function openMeeting(){
  if(!room||meeting)return;closeMobileNavigation();endLive();clearVoiceNote();cancelVoice();
  if(room.private){toast('Share the private context into a group first; private room contents are not exposed to other members.');return;}
- const rid=selected,epoch=++meetingEpoch;document.querySelector('#meeting-view').hidden=false;meetingStatus('Joining shared call…');
+ const rid=selected,epoch=++meetingEpoch;document.querySelector('#meeting-view').hidden=false;document.querySelector('#meeting-retry').hidden=true;meetingStatus('Allow microphone access to join…');reportCallState('group_call','connecting',rid);
  try{
-  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  const stream=await callMicrophone(()=>navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}));
   if(epoch!==meetingEpoch){stream.getTracks().forEach(t=>t.stop());return;}
   meetingStream=stream;const result=await api(`/rooms/${rid}/calls`,'POST',{});if(epoch!==meetingEpoch){stream.getTracks().forEach(t=>t.stop());return;}
   meeting=result;meetingSeenEvents=new Set(result.events.map(e=>e.id));meetingVersion='';meetingItem=null;meetingItemKey='';
@@ -23,12 +23,12 @@ async function openMeeting(){
   meetingStatus(meetingIsHost()?'Shared call open · start REIGN when ready.':'Joining participants…');
   document.querySelector('#meeting-start-reign').hidden=!meetingIsHost();document.querySelector('#meeting-record').hidden=!meetingIsHost();document.querySelector('#meeting-select').disabled=!meetingIsHost();
   await renderMeeting(result);meetingTimer=setInterval(pollMeeting,1200);await pollMeeting();
- }catch(e){if(epoch===meetingEpoch){await closeMeeting(true);toast(e.name==='NotAllowedError'?'Microphone access was denied. Allow it to join the voice call.':e.message);}}
+ }catch(e){if(epoch===meetingEpoch){await closeMeeting(true);document.querySelector('#meeting-view').hidden=false;document.querySelector('#meeting-retry').hidden=false;document.querySelector('#meeting-start-reign').hidden=true;meetingStatus('Call failed: '+(e.name==='NotAllowedError'?'Microphone access was denied. Allow it and retry.':e.message));reportCallState('group_call',e.name==='NotAllowedError'?'microphone_denied':'failed',rid);toast(e.name==='NotAllowedError'?'Microphone access was denied. Allow it to join the voice call.':e.message);}}
 }
 async function closeMeeting(force=false){
  if(!force&&(meetingClip||meetingRecorder?.state==='recording')&&!confirm('Discard the unsaved call clip and leave?'))return false;
  if(typeof closeCallFile==='function')closeCallFile();
- const old=meeting;await stopMeetingScreen(false);meetingScreenStreams.clear();meetingEpoch++;clearInterval(meetingTimer);meetingTimer=null;clearTimeout(meetingConnecting);meetingConnecting=null;
+ const old=meeting;if(old)reportCallState('group_call','ended',old.room_id);await stopMeetingScreen(false);meetingScreenStreams.clear();meetingEpoch++;clearInterval(meetingTimer);meetingTimer=null;clearTimeout(meetingConnecting);meetingConnecting=null;
  if(meetingRecorder?.state==='recording')meetingRecorder.stop();meetingRecorder=null;meetingClip=null;
  meetingCleanupAudio?.();meetingCleanupMeter?.();meetingCleanupAudio=null;meetingCleanupMeter=null;
  stopMeetingReign();
@@ -118,13 +118,13 @@ async function startMeetingReign(){
  if(meetingAgentPeer){stopMeetingReign();meetingStatus('REIGN voice stopped. Participant call and shared work remain open.');return;}
  const epoch=meetingEpoch,peer=new RTCPeerConnection();meetingAgentPeer=peer;const channel=peer.createDataChannel('oai-events');meetingAgentChannel=channel;peer.addTrack(meetingMix.stream.getAudioTracks()[0],meetingMix.stream);let greeted=false;
  document.querySelector('#meeting-start-reign').textContent='Cancel REIGN connection';document.querySelector('#meeting-orb').classList.add('ringing');meetingStatus('Connecting REIGN live voice…');
- const fail=message=>{clearTimeout(meetingConnecting);peer.close();if(meetingAgentPeer===peer){stopMeetingReign();document.querySelector('#meeting-start-reign').textContent='Retry REIGN';document.querySelector('#meeting-orb').classList.remove('ringing','thinking','speaking');meetingStatus(message);}};
+ const fail=message=>{reportCallState('group_call','failed',meeting?.room_id);clearTimeout(meetingConnecting);peer.close();if(meetingAgentPeer===peer){stopMeetingReign();document.querySelector('#meeting-start-reign').textContent='Retry REIGN';document.querySelector('#meeting-orb').classList.remove('ringing','thinking','speaking');meetingStatus(message);}};
  meetingConnecting=setTimeout(()=>fail('REIGN did not connect within 45 seconds. Participant audio and the shared view remain available.'),45000);
  peer.ontrack=event=>{const stream=event.streams[0]||new MediaStream([event.track]);meetingAgentStream=stream;meetingAgentForward=new MediaStream([event.track]);const audio=document.querySelector('#meeting-reign-audio');audio.srcObject=stream;audio.volume=1;audio.muted=false;audio.play().catch(()=>{document.querySelector('#meeting-enable-audio').hidden=false;});meetingCleanupAudio?.();meetingCleanupAudio=monitorCallAudio(peer,audio,document.querySelector('#meeting-audio-status'));meetingCleanupMeter?.();meetingCleanupMeter=meterCallOrb(stream,document.querySelector('#meeting-orb'));meetingAgentSource=meetingContext.createMediaStreamSource(stream);meetingAgentSource.connect(meetingRecordMix);
   for(const item of meetingPeers.values())if(!item.forwarded){item.peer.addTrack(event.track,meetingAgentForward);item.forwarded=true;}
  };
  peer.onconnectionstatechange=()=>{if(['failed','disconnected'].includes(peer.connectionState))fail('REIGN voice disconnected. Retry when ready.');};
- channel.onopen=()=>{if(epoch!==meetingEpoch)return;clearTimeout(meetingConnecting);document.querySelector('#meeting-orb').classList.remove('ringing');document.querySelector('#meeting-orb').classList.add('listening');document.querySelector('#meeting-start-reign').textContent='Stop REIGN';meetingStatus('REIGN connected · everyone may speak or ask a question.');};
+ channel.onopen=()=>{if(epoch!==meetingEpoch)return;clearTimeout(meetingConnecting);document.querySelector('#meeting-orb').classList.remove('ringing');document.querySelector('#meeting-orb').classList.add('listening');document.querySelector('#meeting-start-reign').textContent='Stop REIGN';meetingStatus('REIGN connected · everyone may speak or ask a question.');reportCallState('group_call','connected',meeting.room_id);};
  channel.onmessage=async event=>{
   if(epoch!==meetingEpoch)return;let v;try{v=JSON.parse(event.data);}catch{return;}
   if(v.type==='session.created'&&!greeted){greeted=true;meetingSendAgent({type:'response.create',response:{output_modalities:['audio'],instructions:'Briefly greet the group, say you are an AI voice, and ask which saved document or presentation to walk through.'}});}
@@ -136,7 +136,7 @@ async function startMeetingReign(){
   if(v.type==='response.done'){document.querySelector('#meeting-orb').classList.remove('thinking','speaking');}
   if(v.type==='error')fail(v.error?.message||'REIGN reported a voice error.');
  };
- try{const offer=await peer.createOffer();await peer.setLocalDescription(offer);const answer=await meetingRequest('/live',{sdp:offer.sdp});if(epoch!==meetingEpoch||meetingAgentPeer!==peer){peer.close();return;}await peer.setRemoteDescription({type:'answer',sdp:answer.sdp});}catch(e){fail(e.message);}
+ try{const sdp=await callReadyOffer(peer);const answer=await meetingRequest('/live',{sdp});if(epoch!==meetingEpoch||meetingAgentPeer!==peer){peer.close();return;}await peer.setRemoteDescription({type:'answer',sdp:answer.sdp});}catch(e){fail(e.message);}
 }
 async function startMeetingClip(){
  if(!meetingIsHost())return;if(meetingRecorder?.state==='recording'){await meetingRequest('/recording',{recording:false});stopMeetingClip();return;}
@@ -195,6 +195,7 @@ async function startChatCall(){
 }
 document.querySelector('#group-call-button').onclick=openMeeting;
 document.querySelector('#chat-call-button').onclick=startChatCall;
+document.querySelector('#meeting-retry').onclick=startChatCall;
 document.querySelector('#meeting-close').onclick=()=>closeMeeting();
 document.querySelector('#meeting-start-reign').onclick=startMeetingReign;
 document.querySelector('#meeting-mute').onclick=()=>{meetingMuted=!meetingMuted;meetingStream?.getAudioTracks().forEach(t=>t.enabled=!meetingMuted);document.querySelector('#meeting-mute').textContent=meetingMuted?'Unmute':'Mute';document.querySelector('#meeting-mute').setAttribute('aria-pressed',String(meetingMuted));};
