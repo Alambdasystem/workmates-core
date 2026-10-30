@@ -105,4 +105,14 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(response.headers['Content-Security-Policy'],"sandbox; default-src 'none'")
         self.assertIn('inline;',response.headers['Content-Disposition'])
 
-if __name__=='__main__':unittest.main()
+    def test_call_file_queries_are_allowlisted_and_forwarded(self):
+        self.assertEqual(self.c.get('/api/call-files?q=launch').status_code,200)
+        self.assertTrue(self.http.req.full_url.endswith('/api/call-files?q=launch'))
+        self.assertEqual(self.c.get('/api/rooms/r/call-item?kind=document&asset_id=d').status_code,200)
+        self.assertIn('asset_id=d',self.http.req.full_url)
+        self.assertEqual(self.c.get('/api/call-files?redirect=https://example.com').status_code,400)
+        self.assertEqual(self.c.get('/api/rooms/r/call-item?kind=document&asset_id=d&extra=1').status_code,400)
+    def test_notification_worker_has_root_scope_without_cache(self):
+        response=self.c.get('/sw.js');self.assertEqual(response.status_code,200)
+        self.assertIn(b'notificationclick',response.data)
+        self.assertIn('no-cache',response.headers['Cache-Control'])
