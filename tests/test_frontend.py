@@ -29,6 +29,22 @@ class FrontendTests(unittest.TestCase):
         self.assertEqual(self.http.req.get_header('X-csrf-token'),'csrf')
         self.assertIsNone(self.http.req.get_header('Origin'))
         self.assertIn('HttpOnly',r.headers['Set-Cookie'])
+    def test_voice_notes_backgrounds_and_range_are_proxied(self):
+        result=self.c.post('/api/rooms/room/voice',data=b'voice',content_type='audio/webm',headers={'X-CSRF-Token':'csrf','X-Request-ID':'one','X-Audio-Duration':'12'})
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(self.http.req.get_header('X-request-id'),'one')
+        self.assertEqual(self.http.req.get_header('X-audio-duration'),'12')
+        result=self.c.put('/api/preferences/background/image',data=b'image',content_type='image/png',headers={'X-CSRF-Token':'csrf'})
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(self.c.put('/api/me',data=b'image',content_type='image/png').status_code,415)
+        def part(*a,**k):
+            self.http.req=a[0];r=Upstream(b'part',206);r.headers['Content-Range']='bytes 0-3/12';r.headers['Accept-Ranges']='bytes';return r
+        self.http.open=part
+        response=self.c.get('/api/rooms/room/voice/id',headers={'Range':'bytes=0-3'})
+        self.assertEqual(response.status_code,206);self.assertEqual(response.headers['Content-Range'],'bytes 0-3/12')
+        self.assertEqual(self.http.req.get_header('Range'),'bytes=0-3')
+        self.assertIn("media-src 'self' blob:",self.c.get('/').headers['Content-Security-Policy'])
+
     def test_cross_origin_denied(self):
         self.assertEqual(self.c.post('/api/login',json={},headers={'Origin':'https://evil.test'}).status_code,403)
     def test_traversal_denied(self):

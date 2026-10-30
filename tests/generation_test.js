@@ -3,7 +3,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const app=fs.readFileSync('static/app.js','utf8');
 const elements=new Map();
 function element(id){if(!elements.has(id))elements.set(id,{hidden:false,innerHTML:'',textContent:'',value:'docx',scrollTop:0,open:false,replaceChildren(){this.innerHTML='';},showModal(){this.open=true;},close(){this.open=false;},focus(){}});return elements.get(id);}
-const context={console,document:{addEventListener(){},querySelectorAll(){return[];}},$:element,selected:'room',me:{role:'admin'},toast(){},api:async()=>({kind:'text',body:'safe text'})};
+const context={console,document:{addEventListener(){},querySelectorAll(){return[];}},$:element,selected:'room',me:{role:'admin'},toast(){},renderVoiceNotes(){return '';},api:async()=>({kind:'text',body:'safe text'})};
 vm.createContext(context);
 vm.runInContext(app.slice(app.indexOf('const esc ='),app.indexOf('\nlet me,'))+'\n'+app.slice(app.indexOf('function markdown(source)'),app.indexOf('\nlet canvasDoc')),context);
 vm.runInContext(fs.readFileSync('static/assets.js','utf8'),context);
