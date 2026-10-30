@@ -76,3 +76,10 @@ Picture, diagram and document requests show animated loading cards in the conver
 Click a card for a full screen dialog with X/Escape close and downloads. Documents offer Word/PDF/Markdown/text/HTML choices and Edit in Canvas. Images and sanitized SVG diagrams fit the screen. Supported files have bounded text previews; other files retain downloads. Pending full screen previews automatically switch to the saved output. Closing, navigation and logout clear private preview content and ignore stale asynchronous responses.
 
 Run `node tests/generation_test.js` for dependency-free UI lifecycle checks, alongside Python proxy tests.
+
+
+## Reusable images and compositions
+
+Image cards and full screen previews offer Use in chat and Upload to Drive. The composer has an Images picker, a selected-image strip with ordering/removal, and Word/Slides/Video draft shortcuts. Up to ten image references are sent with the message, not copied through browser uploads. A Link Drive action attaches the existing Drive setup/mount flow to the chat. Confirmed Drive copies are marked separately from the always-retained chat original. New provider batch progress is displayed while earlier images are already available.
+
+Generated image Word documents and PowerPoint files have image-aware previews; MP4 files have a full screen video player and original download. Native Office/video exports are served through a bounded 34 MB proxy response limit. `node tests/assets_test.js` covers selection/order/removal, composition drafts, saved/Drive labels and preview markup. Run it alongside `node tests/generation_test.js` and Python tests. Signed-in UI acceptance remains separate from these automated checks.

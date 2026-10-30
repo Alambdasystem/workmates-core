@@ -76,8 +76,8 @@ def create_app(config=None, opener=None):
                 if callback and location in ('/#drive=connected', '/#drive=failed'):
                     return Response(status=302, headers={'Location': location})
                 return jsonify(error='Unexpected backend redirect.'),502
-            body=upstream.read(12*1024*1024+1)
-            if len(body)>12*1024*1024:
+            body=upstream.read(34*1024*1024+1)
+            if len(body)>34*1024*1024:
                 return jsonify(error='Backend response too large.'),502
             result=Response(body,status=status,content_type=upstream.headers.get('Content-Type','application/json'))
             if upstream.headers.get('Content-Disposition'):
