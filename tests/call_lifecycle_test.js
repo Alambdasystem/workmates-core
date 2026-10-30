@@ -1,0 +1,4 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+(async()=>{const c={setTimeout,clearTimeout,Promise};vm.createContext(c);vm.runInContext(fs.readFileSync('static/call_lifecycle.js','utf8'),c);
+let stopped=false;const late=new Promise(r=>setTimeout(()=>r({getTracks:()=>[{stop:()=>stopped=true}]}),20));await assert.rejects(c.callMicrophone(()=>late,2),/microphone/i);await new Promise(r=>setTimeout(r,30));assert(stopped,'A late microphone must be released');
+const peer={iceGatheringState:'complete',localDescription:{sdp:'v=0\r\na=candidate:test'},createOffer:async()=>({sdp:'initial'}),setLocalDescription:async()=>{}};assert.equal(await c.callReadyOffer(peer),peer.localDescription.sdp);console.log('Call lifecycle: timeout releases late microphone; gathered SDP used.');})();

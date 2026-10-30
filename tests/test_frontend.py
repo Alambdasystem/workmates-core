@@ -120,3 +120,11 @@ class FrontendTests(unittest.TestCase):
         home=self.c.get('/');self.assertIn(b'Join the waiting list',home.data)
         self.assertIn(b'login-form',self.c.get('/app').data)
         self.assertEqual(self.c.get('/signup').status_code,302)
+
+    def test_feedback_screenshot_proxy_is_narrow_and_preserves_csrf(self):
+        response=self.c.put('/api/feedback/report/image',data=b'selected-screenshot',content_type='image/png',headers={'X-CSRF-Token':'csrf'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(self.http.req.data,b'selected-screenshot')
+        self.assertEqual(self.http.req.get_header('X-csrf-token'),'csrf')
+        self.assertEqual(self.c.put('/api/feedback/report/image',data=b'svg',content_type='image/svg+xml').status_code,415)
+        self.assertEqual(self.c.put('/api/feedback/report/other',data=b'png',content_type='image/png').status_code,415)
