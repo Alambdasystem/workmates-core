@@ -22,7 +22,7 @@ async function showDashboard(){
 }
 function hideDashboard(){stopDashboardDictation();$('#dashboard').hidden=true;$('#workspace').hidden=false;}
 function stopDashboardDictation(){dashboardRecognition?.stop();dashboardRecognition=null;$('#dashboard-dictate').setAttribute('aria-pressed','false');}
-function setDashboardTheme(value){const theme=value==='dark'?'dark':'light';document.documentElement.dataset.dashboardTheme=theme;try{localStorage.setItem('workmates-dashboard-theme',theme);}catch{}document.querySelectorAll('[data-dash-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.dashTheme===theme)));}
+function setDashboardTheme(value){const theme=value==='dark'?'dark':'light';document.documentElement.dataset.dashboardTheme=theme;document.querySelectorAll('[data-theme-toggle]').forEach(b=>{b.textContent=theme==='dark'?'☀ Light mode':'☾ Dark mode';b.setAttribute('aria-label',theme==='dark'?'Switch to light mode':'Switch to dark mode');});try{localStorage.setItem('workmates-dashboard-theme',theme);}catch{}document.querySelectorAll('[data-dash-theme]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.dashTheme===theme)));}
 (()=>{const $=s=>document.querySelector(s);
 $('#dashboard').addEventListener('click',event=>{
  const target=event.target.closest('[data-dash-room]');if(target)selectRoom(target.dataset.dashRoom).catch(e=>toast(e.message));
@@ -55,6 +55,7 @@ $('#dashboard-avatar').onclick=()=>$('#password-button').click();
 $('#dashboard-home').onclick=()=>showDashboard().catch(e=>toast(e.message));
 $('#dashboard-signout').onclick=()=>$('#logout').click();
 $('#dashboard-notifications').onclick=()=>$('#notification-button').click();
+document.querySelectorAll('[data-theme-toggle]').forEach(b=>b.onclick=()=>setDashboardTheme(document.documentElement.dataset.dashboardTheme==='dark'?'light':'dark'));
 try{setDashboardTheme(localStorage.getItem('workmates-dashboard-theme'));}catch{setDashboardTheme('light');}
 
 })();
