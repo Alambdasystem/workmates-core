@@ -50,7 +50,7 @@ async function sendVoiceNote(){
 }
 async function refreshNotifications(prompt=false){
  if(!me)return;
- try{socialNotifications=await api('/notifications');if(typeof processJoinAlerts==='function')processJoinAlerts(socialNotifications);const count=socialNotifications.filter(n=>!n.seen).length;document.querySelector('#notification-count').textContent=count||'';document.querySelector('#notification-button').setAttribute('aria-label',`Notifications${count?', '+count+' unread':''}`);if(prompt&&count)showNotifications();}catch(e){if(me&&prompt)toast('Notifications are temporarily unavailable.');}
+ try{socialNotifications=await api('/notifications');if(typeof processJoinAlerts==='function')processJoinAlerts(socialNotifications);const count=socialNotifications.filter(n=>!n.seen).length;document.querySelector('#notification-count').textContent=count||'';document.querySelector('#notification-button').setAttribute('aria-label',`Notifications${count?', '+count+' unread':''}`);if(prompt&&count&&!document.querySelector('#modal').open)showNotifications();}catch(e){if(me&&prompt)toast('Notifications are temporarily unavailable.');}
 }
 function showNotifications(){
  modal('Your notifications',socialNotifications.length?socialNotifications.map(n=>`<div class="notification-item"><strong>${esc(n.title)}</strong><small>${esc(date(n.created))}${n.seen?'':' · New'}</small>${n.can_accept?`<button type="button" class="primary" data-accept-notification="${esc(n.id)}">Join group</button>`:`<button type="button" class="secondary" data-open-notification="${esc(n.id)}">Open group</button>`}<button type="button" class="text-button" data-read-notification="${esc(n.id)}">Mark read</button></div>`).join(''):'<p>No notifications yet. Group invitations appear here.</p>',null);
