@@ -57,6 +57,7 @@ function renderRooms() {
 async function selectRoom(id) {
   if (canvasDirty() && !confirm('Leave your unsaved document edits?')) return;
   closeGenerationPreview(); clearAssetSelection(); closeCanvas(true); cancelVoice();
+  closeMobileNavigation();
   selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
   renderRooms(); await refresh();
@@ -76,6 +77,7 @@ async function refresh() {
   } finally { refreshing = false; }
 }
 function renderRoom() {
+  $('#mobile-room-title').textContent = room.name;
   $('#room-name').textContent = room.name; $('#room-description').textContent = room.description;
   $('#member-count').textContent = `${room.members.length} ${room.members.length === 1 ? 'person' : 'people'}`;
   $('#agent-name').textContent = room.agent_name;
@@ -101,7 +103,7 @@ function renderRoom() {
   const active = room.jobs.filter(j => ['queued','running'].includes(j.status));
   const failure = room.jobs.find(j => ['failed','interrupted'].includes(j.status));
   $('#run-state').textContent = active.length ? `${room.agent_name} · ${active.find(j=>j.progress)?.progress || `${active.length} request${active.length === 1 ? '' : 's'} in progress`}` : failure && room.jobs[0]?.id === failure.id ? failure.error : '';
-  renderWork(); adminVisibility(); syncGenerationPreview();
+  renderWork(); adminVisibility(); syncGenerationPreview(); updateChatViewport();
 }
 function renderWork() {
   const root = $('#work-content');

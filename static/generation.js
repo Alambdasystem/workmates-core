@@ -51,10 +51,8 @@ function generationCardsFor(message) {
 }
 function generationAttachmentCards(message) {
   if (message.kind==='human') return renderMessageAssets(message);
-  return (message.attachments || []).filter(a=>{
-    const file = (room.files || []).find(f=>f.id===a.id);
-    return !file || !room.messages.some(m=>m.id===file.message_id);
-  }).map(a=>generationOutputCard('file',a.id)).join('');
+  // Show saved outputs beside the assistant answer for every group member.
+  return (message.attachments || []).map(a=>generationOutputCard('file',a.id)).join('');
 }
 function startGenerationFeedback(content) {
   const kind = generationKind(content);
@@ -113,6 +111,10 @@ async function syncGenerationPreview() {
       try {
         const value=await api(`/rooms/${selected}/files/${file.id}/preview`);
         if (request!==generationPreviewRequest || !generationPreview) return;
+        if (value.kind==='spreadsheet') {
+          const workbook=JSON.parse(value.body);
+          content.innerHTML=`<article class="full-document-preview spreadsheet-preview"><h1>${esc(file.filename)}</h1><p class="preview-note">Shared with everyone in this group. ${esc(workbook.note)}</p>${workbook.sheets.map(sheet=>`<section><h2>${esc(sheet.name)}</h2><div class="table-scroll"><table>${sheet.rows.map(row=>`<tr>${row.map(cell=>`<td>${esc(cell)}</td>`).join('')}</tr>`).join('')}</table></div></section>`).join('')}</article>`; return;
+        }
         if (['presentation','image_document'].includes(value.kind)) { content.innerHTML=renderCompositionPreview(value); return; }
         content.innerHTML=`<article class="full-document-preview"><h1>${esc(file.filename)}</h1>${value.kind==='document'?`<p class="preview-note">Text preview · download the original for its full layout.</p><div class="formatted">${markdown(value.body)}</div>`:`<pre class="full-text-preview">${esc(value.body)}</pre>`}</article>`;
       } catch(e) { if (request===generationPreviewRequest) content.innerHTML=`<p class="preview-note">${esc(e.message)} You can still download the original.</p>`; }
