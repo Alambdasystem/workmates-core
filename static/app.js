@@ -19,7 +19,7 @@ async function api(path, method = 'GET', body) {
   const response = await fetch('/api' + path, {method, headers: {'Content-Type':'application/json','X-CSRF-Token':me?.csrf || ''}, body:body === undefined ? undefined : JSON.stringify(body)});
   const value = await response.json();
   if (!response.ok) {
-    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
+    if (response.status === 401 && me) { closeGenerationPreview(); clearAssetSelection(); clearVoiceNote(); endLive();soloActive=false;$('#solo-view').hidden=true;clearInterval(socialPoll); me = null; $('#workspace').hidden = true; $('#login').hidden = false; }
     throw new Error(value.error || 'Request failed.');
   }
   return value;
@@ -45,6 +45,7 @@ async function boot() {
   if (destination.has('canvas') && destination.has('room') && rooms.some(r=>r.id===destination.get('room'))) {
     await selectRoom(destination.get('room')); await openCanvas(destination.get('canvas')); history.replaceState(null,'','/');
   }
+  await initSocial();
 }
 async function loadRooms() {
   rooms = await api('/rooms'); renderRooms();
@@ -56,7 +57,8 @@ function renderRooms() {
 }
 async function selectRoom(id) {
   if (canvasDirty() && !confirm('Leave your unsaved document edits?')) return;
-  closeGenerationPreview(); clearAssetSelection(); closeCanvas(true); cancelVoice();
+  closeGenerationPreview(); clearAssetSelection(); closeCanvas(true); cancelVoice(); clearVoiceNote();
+  if (soloActive && selected!==id) {endLive();soloActive=false;$('#solo-view').hidden=true;}
   closeMobileNavigation();
   selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
@@ -79,6 +81,8 @@ async function refresh() {
 function renderRoom() {
   $('#mobile-room-title').textContent = room.name;
   $('#room-name').textContent = room.name; $('#room-description').textContent = room.description;
+  $('#invite-button').hidden=!!room.private;
+  $('#solo-button').textContent='☎ Call '+room.agent_name;
   $('#member-count').textContent = `${room.members.length} ${room.members.length === 1 ? 'person' : 'people'}`;
   $('#agent-name').textContent = room.agent_name;
   $('#agent-state').textContent = `${room.agent_name} ${room.enabled ? 'on' : 'off'}`;
@@ -103,7 +107,7 @@ function renderRoom() {
   const active = room.jobs.filter(j => ['queued','running'].includes(j.status));
   const failure = room.jobs.find(j => ['failed','interrupted'].includes(j.status));
   $('#run-state').textContent = active.length ? `${room.agent_name} · ${active.find(j=>j.progress)?.progress || `${active.length} request${active.length === 1 ? '' : 's'} in progress`}` : failure && room.jobs[0]?.id === failure.id ? failure.error : '';
-  renderWork(); adminVisibility(); syncGenerationPreview(); updateChatViewport();
+  renderWork(); adminVisibility(); syncGenerationPreview(); updateChatViewport(); renderSolo();
 }
 function renderWork() {
   const root = $('#work-content');
@@ -118,6 +122,7 @@ function renderWork() {
   }
 }
 function modal(title, body, action, saveLabel = 'Save changes') {
+  $('#modal-body').onclick = null;
   $('#modal-title').textContent = title; $('#modal-body').innerHTML = body; $('#modal-error').textContent = '';
   $('#save-modal').textContent = saveLabel; $('#save-modal').hidden = !action; $('#cancel-modal').textContent = action ? 'Cancel' : 'Close';
   saveAction = action;
@@ -135,17 +140,6 @@ function configure() {
     await api(`/rooms/${id}/workmate`, 'PATCH', {agent_name:f.get('agent_name'),prompt:f.get('prompt'),mode:f.get('mode'),enabled:f.has('enabled'),goal:f.get('goal'),tools:Object.keys(TOOL_LABELS).filter(t => f.has(t))});
     await loadRooms(); await refresh(); toast('Workmate settings saved.');
   });
-}
-function invitePeople() {
-  const id = room.id;
-  modal('Bring someone into the room.', '<label>Their email<input name="email" type="email" required placeholder="teammate@company.com"></label><p class="hint">Create a private, single-use invitation for this group. You can copy the link and share it yourself. It expires in seven days.</p>', async f => {
-    const result = await api(`/rooms/${id}/invites`,'POST',{email:f.get('email')});
-    const link = location.origin + '/#invite=' + encodeURIComponent(result.token) + '&email=' + encodeURIComponent(result.email);
-    $('#modal-body').innerHTML = `<p>Your invitation for <strong>${esc(result.email)}</strong> is ready. No email has been sent.</p><label>Private invitation link<textarea readonly rows="4" id="invite-link">${esc(link)}</textarea></label><button type="button" id="copy-invite" class="secondary">Copy link</button><p class="hint">Only the intended recipient should receive this link.</p>`;
-    $('#copy-invite').addEventListener('click', async () => { try { await navigator.clipboard.writeText(link); toast('Invitation copied.'); } catch { $('#invite-link').select(); toast('Select and copy the invitation link.'); } });
-    $('#save-modal').hidden = true; $('#cancel-modal').textContent = 'Done'; saveAction = null;
-    return false;
-  }, 'Create invitation ↗');
 }
 $('#login-form').addEventListener('submit', async event => {
   event.preventDefault(); $('#auth-error').textContent = ''; $('#sign-in').disabled = true;
@@ -167,7 +161,7 @@ $('#close-modal').onclick = $('#cancel-modal').onclick = () => $('#modal').close
 $('#new-group').onclick = $('#first-group').onclick = createGroup;
 $('#configure-button').onclick = configure; $('#invite-button').onclick = invitePeople;
 $('#room-list').addEventListener('click', event => { const b = event.target.closest('[data-room]'); if (b) selectRoom(b.dataset.room); });
-$('#logout').onclick = async () => { closeGenerationPreview(); clearAssetSelection(); cancelVoice(); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
+$('#logout').onclick = async () => { closeGenerationPreview(); clearAssetSelection(); cancelVoice(); clearVoiceNote(); endLive(); clearInterval(socialPoll); try { await api('/logout','POST',{}); location.href = '/'; } catch(e) { toast(e.message); } };
 $('#password-button').onclick = () => modal('Change your password.', '<label>Current password<input name="current" type="password" autocomplete="current-password" required></label><label>New password<input name="password" type="password" autocomplete="new-password" minlength="14" maxlength="256" required></label><p class="hint">Use at least 14 characters. Other sessions will be signed out.</p>', async f => { await api('/password','POST',{current:f.get('current'),password:f.get('password')}); me = await api('/me'); toast('Password updated.'); });
 let settingsSaving = false;
 async function updateSettings(changes) {
@@ -248,6 +242,7 @@ function cancelVoice() {
 $('#voice-button').onclick = async () => {
   if (voiceRecorder?.state === 'recording') { voiceRecorder.stop(); return; }
   if (transcribing || voiceStarting || !selected) return;
+  clearVoiceNote();
   if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast('Voice recording is unavailable in this browser. You can use your keyboard microphone.'); return; }
   const generation = ++voiceGeneration, roomId = selected, chunks = [];
   voiceStarting = true;

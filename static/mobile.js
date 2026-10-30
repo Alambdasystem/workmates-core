@@ -50,7 +50,7 @@ function updateChatViewport() {
 document.querySelector('#navigation-toggle').onclick=()=>openMobileNavigation();
 document.querySelector('#close-navigation').onclick=closeMobileNavigation;
 document.querySelector('#navigation-backdrop').onclick=closeMobileNavigation;
-document.querySelector('#shared-work-button').onclick=()=>{ document.querySelector('[data-tab="work"]').click(); openMobileNavigation(true); };
+document.querySelector('#shared-work-button').onclick=()=>agentDrive();
 document.querySelector('#jump-latest').onclick=()=>{
   const messages=document.querySelector('#messages');
   messages.scrollTo({top:messages.scrollHeight,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});

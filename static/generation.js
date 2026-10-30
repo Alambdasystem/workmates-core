@@ -50,7 +50,7 @@ function generationCardsFor(message) {
   return cards ? '<div class="generation-cards">'+cards+'</div>' : '';
 }
 function generationAttachmentCards(message) {
-  if (message.kind==='human') return renderMessageAssets(message);
+  if (message.kind==='human') return renderVoiceNotes(message) + renderMessageAssets(message);
   // Show saved outputs beside the assistant answer for every group member.
   return (message.attachments || []).map(a=>generationOutputCard('file',a.id)).join('');
 }
