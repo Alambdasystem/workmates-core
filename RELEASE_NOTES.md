@@ -8,3 +8,10 @@
 - Dark human-message and voice-card contrast corrected after signed-in screenshot review.
 
 Public waitlist, password-recovery email and LinkedIn publication are separate ongoing work; not marked complete here.
+
+2026.10.30-workspace-2
+- Workspace Tools on the dashboard and navigation: personal catch-up, shared pinned/recent work, proposed action items and beta issue reports with optional selected screenshots.
+- Admin command center: generation/call/email diagnostics, provider-reported chat token counts, AI pause and rolling-24-hour request caps. Token counts exclude voice, image/tool charges and are not a billing total.
+- Meeting controls grouped into a floating Tools menu. Microphone timeout retains a retry state and releases late media; gathered SDP used for live negotiation. Private calls persist across ordinary tab switches and end on page exit.
+- REIGN gains a permission-checked action proposal tool; only the named room member may accept or complete it. Accepted actions use existing verified opt-in email/personal reminders.
+- Existing room file tools, synchronization, visual previews and version history retained. Physical two-device audio and mobile device acceptance remain separate verification gates.
