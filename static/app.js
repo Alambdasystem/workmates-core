@@ -5,6 +5,7 @@ let me, rooms = [], room, selected, tab = 'work', lastMessages = '', refreshing 
 const TOOL_LABELS = {drive_save_file:'Copy images & files to Drive',list_saved_files:'Find saved images & files',read_saved_image:'Look at saved images',create_image_document:'Word documents with images',create_presentation:'PowerPoint with image backgrounds',create_slideshow:'MP4 slideshows & transitions',generate_images:'Generate image batches',web_search:'Web research',create_task:'Create tasks',update_task:'Update tasks',search_documents:'Search group documents',save_document:'Create Word / PDF / Canvas',read_document:'Read group documents',update_document:'Edit Canvas documents',branch_document:'Branch documents',code_interpreter:'Code execution & data files',image_generation:'Generate images',drive_list:'Browse connected Drive folders',drive_read:'Read Drive documents',drive_save:'Save Google Docs',drive_branch:'Create Drive subfolders'};
 const invitation = new URLSearchParams(location.hash.slice(1));
 const inviteToken = invitation.get('invite');
+let signupMode=false,invitationHandled=false;
 if (inviteToken) {
   history.replaceState(null, '', '/');
   $('#auth-title').textContent = 'Join your team.';
@@ -32,27 +33,28 @@ function toast(text) { $('#toast').textContent = text; $('#toast').hidden = fals
 function timestamp(t) { return new Date(t * 1000).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}); }
 function date(t) { return new Date(t * 1000).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
 function initials(name) { return name.split(/\s+/).map(w => w[0]).slice(0,2).join('').toUpperCase(); }
-function adminVisibility() { document.querySelectorAll('.admin-only').forEach(el => el.hidden = me?.role !== 'admin'); }
+function adminVisibility() { document.querySelectorAll('.admin-only').forEach(el => el.hidden = me?.role !== 'admin');document.querySelectorAll('.room-manager').forEach(el=>el.hidden=!room?.can_manage); }
 async function boot() {
   me = await api('/me');
   $('#login').hidden = true; $('#workspace').hidden = false;
   $('#my-name').textContent = me.name; $('#my-avatar').textContent = initials(me.name);
   $('#workspace-model').textContent = me.model || 'OpenAI';
   $('#role-label').textContent = me.role === 'admin' ? 'Workspace administrator' : 'Team member';
-  $('#empty-description').textContent = me.role === 'admin' ? 'Create your first group, invite your people, and give your workmate a job.' : 'Your groups will appear here when your admin invites you.';
+  $('#empty-description').textContent = 'Create a room, invite your people, or open a room someone shared with you.';
   adminVisibility(); await loadRooms();
   const destination = new URLSearchParams(location.hash.slice(1));
   if (destination.has('canvas') && destination.has('room') && rooms.some(r=>r.id===destination.get('room'))) {
     await selectRoom(destination.get('room')); await openCanvas(destination.get('canvas')); history.replaceState(null,'','/');
   }
   await initSocial();
+  if(inviteToken&&!invitationHandled){invitationHandled=true;modal('Join the shared room?', '<p>This invitation adds your existing account to the shared conversation.</p>',async()=>{const result=await api('/invites/accept','POST',{token:inviteToken});await loadRooms();await selectRoom(result.room_id);},'Join room');}
 }
 async function loadRooms() {
   rooms = await api('/rooms'); renderRooms();
   if (!selected && rooms.length) await selectRoom(rooms[0].id);
 }
 function renderRooms() {
-  $('#room-list').innerHTML = rooms.map(r => `<button data-room="${esc(r.id)}" class="${selected === r.id ? 'active' : ''}"><span class="room-icon">#</span>${esc(r.name)}${r.enabled ? '<span class="dot"></span>' : ''}</button>`).join('') + (me.role === 'admin' ? '<button id="create-in-nav">＋ New group</button>' : '');
+  $('#room-list').innerHTML = rooms.map(r => `<button data-room="${esc(r.id)}" class="${selected === r.id ? 'active' : ''}"><span class="room-icon">#</span>${esc(r.name)}${r.enabled ? '<span class="dot"></span>' : ''}</button>`).join('') + '<button id="create-in-nav">＋ New group</button>';
   $('#create-in-nav')?.addEventListener('click', createGroup);
 }
 async function selectRoom(id) {
@@ -62,9 +64,10 @@ async function selectRoom(id) {
   closeMobileNavigation();
   selected = id; lastMessages = ''; room = null;
   $('#empty-workspace').hidden = true; $('#room-view').hidden = false;
-  renderRooms(); await refresh();
+  renderRooms(); await refresh(true);
 }
-async function refresh() {
+async function refresh(waitForCurrent = false) {
+  if (waitForCurrent && refreshing) {for(let n=0;n<100 && refreshing;n++)await new Promise(resolve=>setTimeout(resolve,50));}
   if (!me || !selected || refreshing) return;
   refreshing = true;
   const id = selected;
@@ -114,7 +117,7 @@ function renderWork() {
   if (tab === 'drive') {
     renderDrive(root);
   } else if (tab === 'people') {
-    root.innerHTML = room.members.map(u => `<div class="person"><span class="avatar">${esc(initials(u.name))}</span><div><strong>${esc(u.name)}</strong><small>${esc(u.email)} · ${esc(u.role)}</small></div>${me.role === 'admin' && u.role !== 'admin' ? `<button class="text-button" data-remove="${esc(u.id)}">Remove</button>` : ''}</div>`).join('');
+    root.innerHTML = room.members.map(u => `<div class="person"><span class="avatar">${esc(initials(u.name))}</span><div><strong>${esc(u.name)}</strong><small>${esc(u.email)} · ${esc(u.role)}</small></div>${room.can_manage && u.role !== 'admin' && u.id !== me.id ? `<button class="text-button" data-remove="${esc(u.id)}">Remove</button>` : ''}</div>`).join('');
   } else if (tab === 'activity') {
     root.innerHTML = room.actions.length ? room.actions.map(a => `<div class="activity"><strong>${esc(a.actor)} · ${esc(a.action.replaceAll('_',' '))}</strong><p>${esc(a.detail)}</p><time>${esc(date(a.created))}</time></div>`).join('') : '<p class="empty-note">Workmate actions and admin changes will appear here.</p>';
   } else {
@@ -129,7 +132,7 @@ function modal(title, body, action, saveLabel = 'Save changes') {
   $('#modal').showModal();
 }
 function createGroup() {
-  modal('A new place to work.', '<label>Group name<input name="name" placeholder="e.g. Product launch" maxlength="80" required></label><label>What is this group for?<textarea name="description" rows="3" maxlength="500" placeholder="A shared purpose gives everyone a good place to start."></textarea></label><p class="hint">Only you can create groups. Each group starts with a paused REIGN workmate that you can customize.</p>', async f => {
+  modal('A new place to work.', '<label>Group name<input name="name" placeholder="e.g. Product launch" maxlength="80" required></label><label>What is this group for?<textarea name="description" rows="3" maxlength="500" placeholder="A shared purpose gives everyone a good place to start."></textarea></label><p class="hint">You own the rooms you create and can invite others. Each room starts with a paused REIGN workmate you can customize.</p>', async f => {
     const result = await api('/rooms','POST',{name:f.get('name'),description:f.get('description')});
     selected = result.id; await loadRooms(); await selectRoom(result.id); toast('Group created. Make it yours.');
   }, 'Create group ↗');
@@ -145,7 +148,8 @@ $('#login-form').addEventListener('submit', async event => {
   event.preventDefault(); $('#auth-error').textContent = ''; $('#sign-in').disabled = true;
   try {
     const f = new FormData(event.target);
-    await api(inviteToken ? '/join' : '/login', 'POST', {email:f.get('email'),password:f.get('password'),name:f.get('name'),token:inviteToken});
+    await api(inviteToken ? '/join' : signupMode ? '/signup' : '/login', 'POST', {email:f.get('email'),password:f.get('password'),name:f.get('name'),token:inviteToken});
+    if(inviteToken)invitationHandled=true;
     event.target.reset(); await boot();
   } catch(error) { $('#auth-error').textContent = error.message; }
   finally { $('#sign-in').disabled = false; }
@@ -373,3 +377,6 @@ $('#canvas-drive').onclick=()=>canvasAction(async()=>{
 });
 const launchParams=new URLSearchParams(location.hash.slice(1));
 if (launchParams.has('drive')) { history.replaceState(null,'','/'); toast(launchParams.get('drive')==='connected'?'Google Drive connected. Open the Drive tab to attach a folder.':'Google connection was not completed. Check setup and reconnect.'); }
+
+$('#signup-toggle').onclick=()=>{signupMode=!signupMode;$('#auth-title').textContent=signupMode?'Create your Workmates account.':'Welcome back.';$('#auth-description').textContent=signupMode?'Create rooms, invite your people, and keep your work together.':'Sign in to pick up where your team left off.';$('#name-label').hidden=!signupMode;$('#name-label input').required=signupMode;$('#login-form [name=password]').minLength=signupMode?14:0;$('#login-form [name=password]').autocomplete=signupMode?'new-password':'current-password';$('#sign-in').textContent=signupMode?'Create account ↗':'Enter workspace ↗';$('#signup-toggle').textContent=signupMode?'Already have an account? Sign in':'New here? Create an account';$('#auth-error').textContent='';};
+if(inviteToken)$('#signup-toggle').hidden=true;
