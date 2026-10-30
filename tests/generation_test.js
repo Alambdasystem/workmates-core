@@ -29,7 +29,7 @@ async function run(){
  const failed=context.generationLoading('image','failed','Provider <error>');assert(!failed.includes('manifest-dots'));assert(failed.includes('Provider &lt;error&gt;'));
  context.room.files=[{id:'image',job_id:'job',message_id:1,filename:'Diagram.svg',mime:'application/octet-stream'}];
  assert(context.generationOutputCard('file','image').includes('/files/image/preview'));
- assert(context.generationAttachmentCards({attachments:[{id:'image'}]})==='');
+ assert(context.generationAttachmentCards({attachments:[{id:'image'}]}).includes('generation-ready'));
  await context.openGenerationPreview('file','image');assert(element('#generation-preview-content').innerHTML.includes('full-image-preview'));
  assert(element('#generation-preview-download').href.endsWith('/files/image'));
  context.closeGenerationPreview();
