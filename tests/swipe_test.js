@@ -1,0 +1,11 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('static/mobile.js','utf8');
+assert(source.includes('function swipeNavigationIntent('),'Swipe navigation behavior must exist');
+const begin=source.indexOf('function swipeNavigationIntent('),end=source.indexOf('\n}',begin)+2;
+const c={};vm.createContext(c);vm.runInContext(source.slice(begin,end),c);
+assert.equal(c.swipeNavigationIntent({x:12,y:200},{x:110,y:210},false),'open');
+assert.equal(c.swipeNavigationIntent({x:250,y:210},{x:120,y:220},true),'close');
+assert.equal(c.swipeNavigationIntent({x:12,y:200},{x:20,y:320},false),null);
+assert.equal(c.swipeNavigationIntent({x:12,y:200},{x:45,y:205},false),null);
+assert.equal(c.swipeNavigationIntent({x:180,y:200},{x:300,y:205},false),null);
+console.log('Swipe navigation passed: edge open, drawer close, vertical scroll and short gesture protection.');
