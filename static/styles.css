@@ -121,3 +121,6 @@
 @media(max-width:850px){.composer:has(.chat-call-entry:not([hidden])){padding:10px}.chat-call-button{min-height:58px;padding:10px 16px}.chat-call-button strong{font-size:16px}.chat-call-button small{font-size:11px}.chat-call-entry{margin-bottom:8px}.chat-call-entry>small{font-size:9px}.composer textarea{min-height:58px;max-height:18dvh}.composer-actions{display:flex;gap:5px;flex-wrap:wrap}.composer-actions button{min-height:44px;padding:9px 10px;font-size:11px}.composer-bottom{gap:6px;flex-wrap:wrap}.composer-hint{font-size:9px}.chat-call-button:focus-visible{outline:3px solid #71efb6;outline-offset:3px}}
 
 #email-settings{margin:8px 8px 0}#modal-body table{border-collapse:collapse;width:100%;font-size:12px}#modal-body th,#modal-body td{padding:10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}#modal-body .table-scroll{overflow:auto;margin-top:18px;max-height:55vh}#forgot-password{margin-bottom:0}.dash-header{flex-wrap:wrap}
+/* Keep paper thumbnails readable inside both appearance themes. */
+[data-dashboard-theme=dark] .document-miniature{background:#fff;color:#294538}
+[data-dashboard-theme=dark] .document-miniature :is(p,h1,h2,h3,strong,li,td,th){color:#294538}
